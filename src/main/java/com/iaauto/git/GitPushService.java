@@ -6,6 +6,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -19,31 +21,46 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public final class GitPushService {
     private final Path serverRoot;
     private final GitConfig config;
+    private final Consumer<PushProgress> progressListener;
 
     public GitPushService(IAAutoPlugin plugin) {
+        this(plugin, progress -> {
+        });
+    }
+
+    public GitPushService(IAAutoPlugin plugin, Consumer<PushProgress> progressListener) {
         this.serverRoot = plugin.getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
         this.config = GitConfig.from(plugin.getConfig());
+        this.progressListener = progressListener == null ? progress -> {
+        } : progressListener;
     }
 
     public PushResult pushGeneratedZip() throws GitPushException {
+        reportProgress(0.02D, "Validating git configuration");
         if (isBlank(config.remoteUrl())) {
             throw new GitPushException("git.remote-url is empty. Configure it in plugins/IAAuto/config.yml.");
         }
 
+        reportProgress(0.08D, "Checking ItemsAdder generated.zip");
         Path sourceFile = resolveServerPath(config.sourceFile());
         if (!Files.isRegularFile(sourceFile)) {
             throw new GitPushException("Source file does not exist: " + sourceFile);
         }
 
+        reportProgress(0.14D, "Preparing local repository");
         Path repositoryDirectory = resolveServerPath(config.repositoryDirectory());
         ensureRepository(repositoryDirectory);
+
+        reportProgress(0.34D, "Applying git author configuration");
         applyAuthorConfig(repositoryDirectory);
 
+        reportProgress(0.42D, "Copying generated.zip into the repository");
         Path repositoryFile = resolveInsideRepository(repositoryDirectory, config.repositoryFile());
         Path repositoryFileParent = repositoryFile.getParent();
         if (repositoryFileParent != null) {
@@ -51,16 +68,23 @@ public final class GitPushService {
         }
         copySourceToRepository(sourceFile, repositoryFile);
 
+        reportProgress(0.52D, "Staging generated.zip");
         String gitFilePath = toGitPath(repositoryDirectory.relativize(repositoryFile));
         runGitOrThrow(repositoryDirectory, "add", "--", gitFilePath);
 
+        reportProgress(0.60D, "Checking repository changes");
         CommandResult status = runGitOrThrow(repositoryDirectory, "status", "--porcelain", "--", gitFilePath);
         boolean committed = !status.output().isBlank();
         if (committed) {
+            reportProgress(0.68D, "Committing generated.zip");
             runGitOrThrow(repositoryDirectory, "commit", "-m", config.commitMessage(), "--", gitFilePath);
+        } else {
+            reportProgress(0.68D, "No file changes found; verifying remote branch");
         }
 
-        runGitOrThrow(repositoryDirectory, "push", "-u", "origin", config.branch());
+        reportProgress(0.76D, "Pushing to origin/" + config.branch());
+        runGitOrThrow(repositoryDirectory, new ProgressRange(0.76D, 0.98D, "Git push"), "push", "--progress", "-u", "origin", config.branch());
+        reportProgress(1.0D, "Push finished");
         return new PushResult(committed, config.branch(), repositoryDirectory.toString(), gitFilePath);
     }
 
@@ -86,6 +110,7 @@ public final class GitPushService {
             throw new GitPushException("Repository directory must have a parent: " + repositoryDirectory);
         }
 
+        reportProgress(0.18D, "Cloning repository");
         createDirectories(parent);
         String directoryName = repositoryDirectory.getFileName().toString();
         CommandResult clone = runGit(parent, List.of("clone", config.remoteUrl(), directoryName));
@@ -93,6 +118,7 @@ public final class GitPushService {
             return;
         }
 
+        reportProgress(0.24D, "Initializing local repository");
         createDirectories(repositoryDirectory);
         CommandResult init = runGit(repositoryDirectory, List.of("init"));
         if (init.exitCode() != 0) {
@@ -101,6 +127,7 @@ public final class GitPushService {
     }
 
     private void configureRemote(Path repositoryDirectory) throws GitPushException {
+        reportProgress(0.24D, "Configuring git remote");
         CommandResult existingRemote = runGit(repositoryDirectory, List.of("remote", "get-url", "origin"));
         if (existingRemote.exitCode() == 0) {
             if (!Objects.equals(existingRemote.output().trim(), config.remoteUrl())) {
@@ -113,6 +140,7 @@ public final class GitPushService {
     }
 
     private void checkoutBranch(Path repositoryDirectory) throws GitPushException {
+        reportProgress(0.30D, "Checking out branch " + config.branch());
         CommandResult checkoutExisting = runGit(repositoryDirectory, List.of("checkout", config.branch()));
         if (checkoutExisting.exitCode() == 0) {
             return;
@@ -194,8 +222,12 @@ public final class GitPushService {
     }
 
     private CommandResult runGitOrThrow(Path workingDirectory, String... arguments) throws GitPushException {
+        return runGitOrThrow(workingDirectory, null, arguments);
+    }
+
+    private CommandResult runGitOrThrow(Path workingDirectory, ProgressRange progressRange, String... arguments) throws GitPushException {
         List<String> argumentList = List.of(arguments);
-        CommandResult result = runGit(workingDirectory, argumentList);
+        CommandResult result = runGit(workingDirectory, argumentList, progressRange);
         if (result.exitCode() == 0) {
             return result;
         }
@@ -203,6 +235,10 @@ public final class GitPushService {
     }
 
     private CommandResult runGit(Path workingDirectory, List<String> arguments) throws GitPushException {
+        return runGit(workingDirectory, arguments, null);
+    }
+
+    private CommandResult runGit(Path workingDirectory, List<String> arguments, ProgressRange progressRange) throws GitPushException {
         List<String> command = new ArrayList<>(arguments.size() + 1);
         command.add(config.executable());
         command.addAll(arguments);
@@ -219,7 +255,7 @@ public final class GitPushService {
             throw new GitPushException("Failed to start git executable '" + config.executable() + "'.", exception);
         }
 
-        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process.getInputStream()));
+        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process.getInputStream(), progressRange));
         boolean finished;
         try {
             finished = process.waitFor(config.timeoutSeconds(), TimeUnit.SECONDS);
@@ -238,12 +274,38 @@ public final class GitPushService {
         return new CommandResult(process.exitValue(), output == null ? "" : output.trim());
     }
 
-    private String readProcessOutput(InputStream inputStream) {
-        try (inputStream) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+    private String readProcessOutput(InputStream inputStream, ProgressRange progressRange) {
+        try (inputStream; Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
+            StringBuilder output = new StringBuilder();
+            StringBuilder segment = new StringBuilder();
+            int character;
+            while ((character = reader.read()) != -1) {
+                output.append((char) character);
+                if (character == '\r' || character == '\n') {
+                    flushGitOutputSegment(segment, progressRange);
+                } else {
+                    segment.append((char) character);
+                }
+            }
+            flushGitOutputSegment(segment, progressRange);
+            return output.toString();
         } catch (IOException exception) {
             return "Failed to read git output: " + exception.getMessage();
         }
+    }
+
+    private void flushGitOutputSegment(StringBuilder segment, ProgressRange progressRange) {
+        if (segment.isEmpty()) {
+            return;
+        }
+
+        String output = sanitizeOutput(segment.toString());
+        segment.setLength(0);
+        if (progressRange == null || output.isBlank()) {
+            return;
+        }
+
+        reportGitProgress(progressRange, output);
     }
 
     private String getOutput(CompletableFuture<String> outputFuture) throws GitPushException {
@@ -287,6 +349,55 @@ public final class GitPushService {
         return sanitized;
     }
 
+    private void reportGitProgress(ProgressRange progressRange, String output) {
+        int percent = findFirstPercent(output);
+        if (percent >= 0) {
+            double progress = scaleGitProgress(progressRange, output, percent);
+            reportProgress(progress, progressRange.label() + ": " + output);
+            return;
+        }
+
+        reportProgress(progressRange.start(), progressRange.label() + ": " + output);
+    }
+
+    private double scaleGitProgress(ProgressRange progressRange, String output, int percent) {
+        GitProgressStage stage = GitProgressStage.from(output);
+        double normalized = percent / 100.0D;
+        if (stage != null) {
+            normalized = stage.start() + ((stage.end() - stage.start()) * normalized);
+        }
+        return progressRange.start() + ((progressRange.end() - progressRange.start()) * normalized);
+    }
+
+    private int findFirstPercent(String output) {
+        for (int index = 0; index < output.length(); index++) {
+            if (output.charAt(index) != '%') {
+                continue;
+            }
+
+            int start = index - 1;
+            while (start >= 0 && Character.isDigit(output.charAt(start))) {
+                start--;
+            }
+
+            if (start == index - 1) {
+                continue;
+            }
+
+            try {
+                int percent = Integer.parseInt(output.substring(start + 1, index));
+                return Math.max(0, Math.min(100, percent));
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+        }
+        return -1;
+    }
+
+    private void reportProgress(double progress, String message) {
+        progressListener.accept(new PushProgress(progress, message));
+    }
+
     private String redactRemoteUserInfo(String remoteUrl) {
         int schemeIndex = remoteUrl.indexOf("://");
         if (schemeIndex < 0) {
@@ -311,6 +422,44 @@ public final class GitPushService {
     }
 
     private record CommandResult(int exitCode, String output) {
+    }
+
+    private record ProgressRange(double start, double end, String label) {
+    }
+
+    private enum GitProgressStage {
+        ENUMERATING("Enumerating objects", 0.0D, 0.10D),
+        COUNTING("Counting objects", 0.10D, 0.25D),
+        COMPRESSING("Compressing objects", 0.25D, 0.55D),
+        WRITING("Writing objects", 0.55D, 0.92D),
+        RESOLVING("Resolving deltas", 0.92D, 1.0D);
+
+        private final String prefix;
+        private final double start;
+        private final double end;
+
+        GitProgressStage(String prefix, double start, double end) {
+            this.prefix = prefix;
+            this.start = start;
+            this.end = end;
+        }
+
+        private double start() {
+            return start;
+        }
+
+        private double end() {
+            return end;
+        }
+
+        private static GitProgressStage from(String output) {
+            for (GitProgressStage stage : values()) {
+                if (output.contains(stage.prefix)) {
+                    return stage;
+                }
+            }
+            return null;
+        }
     }
 
     private record GitConfig(

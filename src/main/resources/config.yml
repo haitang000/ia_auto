@@ -22,3 +22,10 @@ git:
   author:
     name: ""
     email: ""
+
+start:
+  # Command run by /iaauto start before pushing. Do not include the leading slash.
+  pack-command: "iazip"
+
+  # Delay after /iazip before /iaauto push starts. Increase this for larger packs.
+  push-delay-seconds: 10
