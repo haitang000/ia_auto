@@ -41,6 +41,8 @@ git:
   repository-file: "generated.zip"
 ```
 
+IAAuto treats `repository-directory` as a managed checkout. Before copying the latest `generated.zip`, it fetches the configured branch and resets local unpublished history to the remote branch. If a previous GitHub push failed because the zip was too large, the rejected local commit will not be included again after you generate a smaller zip and rerun `/iaauto push`.
+
 `/iaauto start` runs `/iazip` from the console, then waits before pushing. Before the git copy starts, IAAuto also waits until `generated.zip` has refreshed compared with the file state from before `/iazip`, then waits for the file to become stable so an old or half-written pack is not uploaded. Increase these values if your pack needs more time to finish:
 
 ```yaml

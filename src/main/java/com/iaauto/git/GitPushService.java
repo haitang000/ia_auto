@@ -104,7 +104,7 @@ public final class GitPushService {
     private void ensureRepository(Path repositoryDirectory) throws GitPushException {
         if (Files.isDirectory(repositoryDirectory.resolve(".git"))) {
             configureRemote(repositoryDirectory);
-            checkoutBranch(repositoryDirectory);
+            synchronizeBranch(repositoryDirectory);
             return;
         }
 
@@ -114,7 +114,7 @@ public final class GitPushService {
 
         cloneRepository(repositoryDirectory);
         configureRemote(repositoryDirectory);
-        checkoutBranch(repositoryDirectory);
+        synchronizeBranch(repositoryDirectory);
     }
 
     private void cloneRepository(Path repositoryDirectory) throws GitPushException {
@@ -160,6 +160,68 @@ public final class GitPushService {
         }
 
         runGitOrThrow(repositoryDirectory, "checkout", "-B", config.branch());
+    }
+
+    private void synchronizeBranch(Path repositoryDirectory) throws GitPushException {
+        fetchRemoteBranch(repositoryDirectory);
+        boolean hadLocalBranch = localBranchExists(repositoryDirectory);
+        checkoutBranch(repositoryDirectory);
+
+        String remoteBranch = remoteBranchRef();
+        if (remoteBranchExists(repositoryDirectory, remoteBranch)) {
+            reportProgress(0.32D, "Resetting local branch to " + remoteBranch);
+            runGitOrThrow(repositoryDirectory, "reset", "--hard", remoteBranch);
+            return;
+        }
+
+        if (hadLocalBranch && hasHead(repositoryDirectory)) {
+            reportProgress(0.32D, "Rebuilding unpublished local branch");
+            rebuildUnpublishedBranch(repositoryDirectory);
+        }
+    }
+
+    private void fetchRemoteBranch(Path repositoryDirectory) throws GitPushException {
+        reportProgress(0.28D, "Fetching origin/" + config.branch());
+        List<String> fetchArguments = List.of("fetch", "--prune", "origin",
+                "+refs/heads/" + config.branch() + ":" + remoteBranchRef());
+        CommandResult fetch = runGit(repositoryDirectory, fetchArguments);
+        if (fetch.exitCode() == 0) {
+            return;
+        }
+
+        CommandResult remoteHead = runGit(repositoryDirectory,
+                List.of("ls-remote", "--exit-code", "--heads", "origin", config.branch()));
+        if (remoteHead.exitCode() == 2) {
+            return;
+        }
+
+        throw commandFailed(fetchArguments, fetch);
+    }
+
+    private boolean remoteBranchExists(Path repositoryDirectory, String remoteBranch) throws GitPushException {
+        return runGit(repositoryDirectory, List.of("rev-parse", "--verify", "--quiet", remoteBranch)).exitCode() == 0;
+    }
+
+    private boolean localBranchExists(Path repositoryDirectory) throws GitPushException {
+        return runGit(repositoryDirectory,
+                List.of("show-ref", "--verify", "--quiet", "refs/heads/" + config.branch())).exitCode() == 0;
+    }
+
+    private boolean hasHead(Path repositoryDirectory) throws GitPushException {
+        return runGit(repositoryDirectory, List.of("rev-parse", "--verify", "--quiet", "HEAD")).exitCode() == 0;
+    }
+
+    private void rebuildUnpublishedBranch(Path repositoryDirectory) throws GitPushException {
+        String temporaryBranch = "iaauto-rebuild-" + System.nanoTime();
+        runGitOrThrow(repositoryDirectory, "reset", "--hard");
+        runGitOrThrow(repositoryDirectory, "checkout", "--orphan", temporaryBranch);
+        runGitOrThrow(repositoryDirectory, "rm", "-r", "--cached", "--ignore-unmatch", ".");
+        runGitOrThrow(repositoryDirectory, "branch", "-D", config.branch());
+        runGitOrThrow(repositoryDirectory, "symbolic-ref", "HEAD", "refs/heads/" + config.branch());
+    }
+
+    private String remoteBranchRef() {
+        return "refs/remotes/origin/" + config.branch();
     }
 
     private void applyAuthorConfig(Path repositoryDirectory) throws GitPushException {

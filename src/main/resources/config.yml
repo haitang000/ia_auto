@@ -11,6 +11,7 @@ git:
   branch: "main"
 
   # Relative paths are resolved from the Minecraft server root.
+  # repository-directory is managed by IAAuto; unpublished local commits may be reset before pushing.
   source-file: "plugins/ItemsAdder/output/generated.zip"
   repository-directory: "plugins/IAAuto/repository"
   repository-file: "generated.zip"
