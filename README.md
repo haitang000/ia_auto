@@ -26,6 +26,8 @@ The plugin jar will be under `build/libs/` for Gradle or `target/` for Maven.
 4. Make sure the server process can run local `git` and already has GitHub authentication configured, such as SSH keys or Git Credential Manager.
 5. Run `/iaauto start`.
 
+Use `/iaauto help` or `/iaauto` in game or from the console to list the commands available to the sender.
+
 Default source file:
 
 ```yaml
@@ -56,6 +58,7 @@ start:
 
 Permissions:
 
+- `iaauto.help` for `/iaauto help`
 - `iaauto.start` for `/iaauto start`
 - `iaauto.push` for `/iaauto push`
 - `iaauto.reload` for `/iaauto reload`

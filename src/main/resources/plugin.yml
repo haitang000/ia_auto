@@ -8,9 +8,12 @@ author: IAAuto
 commands:
   iaauto:
     description: Runs IAAuto commands.
-    usage: /iaauto <start|push|reload>
+    usage: /iaauto <help|start|push|reload>
 
 permissions:
+  iaauto.help:
+    description: Allows /iaauto help.
+    default: true
   iaauto.start:
     description: Allows /iaauto start.
     default: op

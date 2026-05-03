@@ -26,7 +26,7 @@ import java.util.logging.Level;
 
 public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     private static final String PREFIX = ChatColor.AQUA + "[IAAuto] " + ChatColor.RESET;
-    private static final List<String> SUBCOMMANDS = List.of("start", "push", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("help", "start", "push", "reload");
     private static final long TICKS_PER_SECOND = 20L;
 
     private final IAAutoPlugin plugin;
@@ -38,12 +38,22 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 0) {
+            sendHelp(sender, label);
+            return true;
+        }
+
         if (args.length != 1) {
-            sendUsage(sender, label);
+            sendHelp(sender, label);
             return true;
         }
 
         String subcommand = args[0].toLowerCase(Locale.ROOT);
+        if ("help".equals(subcommand)) {
+            sendHelp(sender, label);
+            return true;
+        }
+
         if ("start".equals(subcommand)) {
             start(sender);
             return true;
@@ -59,7 +69,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        sendUsage(sender, label);
+        sendHelp(sender, label);
         return true;
     }
 
@@ -219,11 +229,22 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(PREFIX + ChatColor.GRAY + "Tracked file: " + result.repositoryFile());
     }
 
-    private void sendUsage(CommandSender sender, String label) {
-        sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage: /" + label + " start");
-        sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage: /" + label + " push");
+    private void sendHelp(CommandSender sender, String label) {
+        if (!sender.hasPermission("iaauto.help")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
+            return;
+        }
+
+        sender.sendMessage(PREFIX + ChatColor.GOLD + "Commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/" + label + " help" + ChatColor.GRAY + " - Show this help message.");
+        if (sender.hasPermission("iaauto.start")) {
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " start" + ChatColor.GRAY + " - Run the pack command, then push generated.zip.");
+        }
+        if (sender.hasPermission("iaauto.push")) {
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " push" + ChatColor.GRAY + " - Push the latest generated.zip to git.");
+        }
         if (sender.hasPermission("iaauto.reload")) {
-            sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage: /" + label + " reload");
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " - Reload the plugin configuration.");
         }
     }
 
