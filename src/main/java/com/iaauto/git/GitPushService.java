@@ -4,6 +4,7 @@ import com.iaauto.IAAutoPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -11,8 +12,12 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +28,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 public final class GitPushService {
     private final Path serverRoot;
@@ -41,7 +48,15 @@ public final class GitPushService {
         } : progressListener;
     }
 
+    public SourceFileSnapshot snapshotSourceFile() throws GitPushException {
+        return snapshotSourceFile(resolveServerPath(config.sourceFile()));
+    }
+
     public PushResult pushGeneratedZip() throws GitPushException {
+        return pushGeneratedZip(null);
+    }
+
+    public PushResult pushGeneratedZip(SourceFileSnapshot previousSourceSnapshot) throws GitPushException {
         reportProgress(0.02D, "Validating git configuration");
         if (isBlank(config.remoteUrl())) {
             throw new GitPushException("git.remote-url is empty. Configure it in plugins/IAAuto/config.yml.");
@@ -49,9 +64,7 @@ public final class GitPushService {
 
         reportProgress(0.08D, "Checking ItemsAdder generated.zip");
         Path sourceFile = resolveServerPath(config.sourceFile());
-        if (!Files.isRegularFile(sourceFile)) {
-            throw new GitPushException("Source file does not exist: " + sourceFile);
-        }
+        SourceFileSnapshot sourceSnapshot = waitForReadySourceFile(sourceFile, previousSourceSnapshot);
 
         reportProgress(0.14D, "Preparing local repository");
         Path repositoryDirectory = resolveServerPath(config.repositoryDirectory());
@@ -66,7 +79,7 @@ public final class GitPushService {
         if (repositoryFileParent != null) {
             createDirectories(repositoryFileParent);
         }
-        copySourceToRepository(sourceFile, repositoryFile);
+        copySourceToRepository(sourceFile, repositoryFile, sourceSnapshot);
 
         reportProgress(0.52D, "Staging generated.zip");
         String gitFilePath = toGitPath(repositoryDirectory.relativize(repositoryFile));
@@ -197,11 +210,163 @@ public final class GitPushService {
         return resolved;
     }
 
-    private void copySourceToRepository(Path sourceFile, Path repositoryFile) throws GitPushException {
-        try {
-            Files.copy(sourceFile, repositoryFile, StandardCopyOption.REPLACE_EXISTING);
+    private SourceFileSnapshot waitForReadySourceFile(Path sourceFile, SourceFileSnapshot previousSourceSnapshot) throws GitPushException {
+        SourceFileSnapshot comparableSnapshot = previousSourceSnapshot;
+        if (comparableSnapshot != null && !Objects.equals(comparableSnapshot.path(), sourceFile)) {
+            comparableSnapshot = null;
+        }
+
+        if (comparableSnapshot != null) {
+            reportProgress(0.10D, "Waiting for generated.zip to refresh");
+            waitForSourceRefresh(sourceFile, comparableSnapshot);
+        }
+
+        reportProgress(0.12D, "Waiting for generated.zip writes to finish");
+        return waitForCompleteSourceFile(sourceFile);
+    }
+
+    private void waitForSourceRefresh(Path sourceFile, SourceFileSnapshot previousSnapshot) throws GitPushException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(config.sourceRefreshTimeoutSeconds());
+        while (true) {
+            SourceFileSnapshot currentSnapshot = snapshotSourceFile(sourceFile);
+            if (currentSnapshot.regularFile() && !currentSnapshot.hasSameFileState(previousSnapshot)) {
+                return;
+            }
+
+            if (System.nanoTime() >= deadline) {
+                throw new GitPushException("Source file did not refresh within " + config.sourceRefreshTimeoutSeconds()
+                        + " seconds after running the pack command: " + sourceFile);
+            }
+
+            sleepUntilNextSourceCheck();
+        }
+    }
+
+    private SourceFileSnapshot waitForStableSourceFile(Path sourceFile) throws GitPushException {
+        long stableNanos = TimeUnit.SECONDS.toNanos(config.sourceStableSeconds());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(config.sourceRefreshTimeoutSeconds());
+        SourceFileSnapshot lastSnapshot = null;
+        long stableSince = -1L;
+
+        while (true) {
+            SourceFileSnapshot currentSnapshot = snapshotSourceFile(sourceFile);
+            if (currentSnapshot.regularFile()) {
+                if (lastSnapshot != null && currentSnapshot.hasSameFileState(lastSnapshot)) {
+                    if (stableSince < 0L) {
+                        stableSince = System.nanoTime();
+                    }
+                    if (System.nanoTime() - stableSince >= stableNanos) {
+                        return currentSnapshot;
+                    }
+                } else {
+                    lastSnapshot = currentSnapshot;
+                    stableSince = System.nanoTime();
+                }
+            }
+
+            if (System.nanoTime() >= deadline) {
+                if (lastSnapshot == null) {
+                    throw new GitPushException("Source file does not exist: " + sourceFile);
+                }
+                throw new GitPushException("Source file did not become stable within " + config.sourceRefreshTimeoutSeconds()
+                        + " seconds: " + sourceFile);
+            }
+
+            sleepUntilNextSourceCheck();
+        }
+    }
+
+    private SourceFileSnapshot waitForCompleteSourceFile(Path sourceFile) throws GitPushException {
+        while (true) {
+            SourceFileSnapshot stableSnapshot = waitForStableSourceFile(sourceFile);
+            waitForReadableZip(sourceFile);
+
+            SourceFileSnapshot checkedSnapshot = snapshotSourceFile(sourceFile);
+            if (checkedSnapshot.hasSameFileState(stableSnapshot)) {
+                return checkedSnapshot;
+            }
+
+            reportProgress(0.13D, "generated.zip changed while being checked; waiting again");
+        }
+    }
+
+    private void waitForReadableZip(Path sourceFile) throws GitPushException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(config.sourceRefreshTimeoutSeconds());
+        while (true) {
+            if (canOpenZip(sourceFile)) {
+                return;
+            }
+
+            if (System.nanoTime() >= deadline) {
+                throw new GitPushException("Source file is not a complete readable zip: " + sourceFile);
+            }
+
+            sleepUntilNextSourceCheck();
+        }
+    }
+
+    private boolean canOpenZip(Path sourceFile) throws GitPushException {
+        try (ZipFile ignored = new ZipFile(sourceFile.toFile())) {
+            return true;
+        } catch (ZipException | FileNotFoundException | NoSuchFileException | NotDirectoryException exception) {
+            return false;
         } catch (IOException exception) {
-            throw new GitPushException("Failed to copy " + sourceFile + " to " + repositoryFile + ".", exception);
+            throw new GitPushException("Failed to read source zip: " + sourceFile, exception);
+        }
+    }
+
+    private void copySourceToRepository(Path sourceFile, Path repositoryFile, SourceFileSnapshot expectedSnapshot) throws GitPushException {
+        SourceFileSnapshot stableSnapshot = expectedSnapshot;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                Files.copy(sourceFile, repositoryFile, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException exception) {
+                throw new GitPushException("Failed to copy " + sourceFile + " to " + repositoryFile + ".", exception);
+            }
+
+            SourceFileSnapshot copiedSnapshot = snapshotSourceFile(sourceFile);
+            if (copiedSnapshot.hasSameFileState(stableSnapshot) && filesMatch(sourceFile, repositoryFile)) {
+                return;
+            }
+
+            reportProgress(0.44D, "generated.zip changed while copying; retrying");
+            stableSnapshot = waitForCompleteSourceFile(sourceFile);
+        }
+
+        throw new GitPushException("Source file kept changing while being copied: " + sourceFile);
+    }
+
+    private boolean filesMatch(Path sourceFile, Path repositoryFile) throws GitPushException {
+        try {
+            return Files.mismatch(sourceFile, repositoryFile) == -1L;
+        } catch (IOException exception) {
+            throw new GitPushException("Failed to verify copied generated.zip.", exception);
+        }
+    }
+
+    private SourceFileSnapshot snapshotSourceFile(Path sourceFile) throws GitPushException {
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(sourceFile, BasicFileAttributes.class);
+            return new SourceFileSnapshot(
+                    sourceFile,
+                    attributes.isRegularFile(),
+                    attributes.size(),
+                    attributes.lastModifiedTime(),
+                    Objects.toString(attributes.fileKey(), "")
+            );
+        } catch (NoSuchFileException | NotDirectoryException exception) {
+            return SourceFileSnapshot.missing(sourceFile);
+        } catch (IOException exception) {
+            throw new GitPushException("Failed to inspect source file: " + sourceFile, exception);
+        }
+    }
+
+    private void sleepUntilNextSourceCheck() throws GitPushException {
+        try {
+            Thread.sleep(config.sourcePollIntervalMillis());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new GitPushException("Interrupted while waiting for generated.zip to refresh.", exception);
         }
     }
 
@@ -421,6 +586,26 @@ public final class GitPushService {
         return value == null || value.trim().isEmpty();
     }
 
+    public record SourceFileSnapshot(
+            Path path,
+            boolean regularFile,
+            long size,
+            FileTime lastModifiedTime,
+            String fileKey
+    ) {
+        private static SourceFileSnapshot missing(Path path) {
+            return new SourceFileSnapshot(path, false, -1L, FileTime.fromMillis(0L), "");
+        }
+
+        private boolean hasSameFileState(SourceFileSnapshot other) {
+            return other != null
+                    && regularFile == other.regularFile
+                    && size == other.size
+                    && Objects.equals(lastModifiedTime, other.lastModifiedTime)
+                    && Objects.equals(fileKey, other.fileKey);
+        }
+    }
+
     private record CommandResult(int exitCode, String output) {
     }
 
@@ -472,7 +657,10 @@ public final class GitPushService {
             String commitMessage,
             long timeoutSeconds,
             String authorName,
-            String authorEmail
+            String authorEmail,
+            long sourceRefreshTimeoutSeconds,
+            long sourceStableSeconds,
+            long sourcePollIntervalMillis
     ) {
         private static GitConfig from(FileConfiguration configuration) {
             return new GitConfig(
@@ -485,7 +673,10 @@ public final class GitPushService {
                     getString(configuration, "git.commit-message", "Update ItemsAdder generated.zip"),
                     Math.max(5L, configuration.getLong("git.timeout-seconds", 120L)),
                     getString(configuration, "git.author.name", ""),
-                    getString(configuration, "git.author.email", "")
+                    getString(configuration, "git.author.email", ""),
+                    Math.max(1L, configuration.getLong("start.source-refresh-timeout-seconds", 120L)),
+                    Math.max(0L, configuration.getLong("start.source-stable-seconds", 2L)),
+                    Math.max(100L, configuration.getLong("start.source-poll-interval-millis", 500L))
             );
         }
 

@@ -41,12 +41,15 @@ git:
   repository-file: "generated.zip"
 ```
 
-`/iaauto start` runs `/iazip` from the console, then waits before pushing. Increase the delay if your pack needs more time to finish:
+`/iaauto start` runs `/iazip` from the console, then waits before pushing. Before the git copy starts, IAAuto also waits until `generated.zip` has refreshed compared with the file state from before `/iazip`, then waits for the file to become stable so an old or half-written pack is not uploaded. Increase these values if your pack needs more time to finish:
 
 ```yaml
 start:
   pack-command: "iazip"
   push-delay-seconds: 10
+  source-refresh-timeout-seconds: 120
+  source-stable-seconds: 2
+  source-poll-interval-millis: 500
 ```
 
 Permissions:

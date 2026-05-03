@@ -102,6 +102,15 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         }
 
         String packCommand = configuredPackCommand();
+        GitPushService.SourceFileSnapshot sourceBeforePack;
+        try {
+            sourceBeforePack = new GitPushService(plugin).snapshotSourceFile();
+        } catch (GitPushException exception) {
+            operationRunning.set(false);
+            sender.sendMessage(PREFIX + ChatColor.RED + compactFailure(exception));
+            return;
+        }
+
         sender.sendMessage(PREFIX + ChatColor.GRAY + "Running /" + packCommand + "...");
 
         boolean dispatched;
@@ -123,15 +132,19 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         long delaySeconds = configuredPushDelaySeconds();
         if (delaySeconds <= 0L) {
             sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /iaauto push...");
-            runPush(sender);
+            runPush(sender, sourceBeforePack);
             return;
         }
 
         sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /iaauto push in " + delaySeconds + " seconds...");
-        Bukkit.getScheduler().runTaskLater(plugin, () -> runPush(sender), delaySeconds * TICKS_PER_SECOND);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> runPush(sender, sourceBeforePack), delaySeconds * TICKS_PER_SECOND);
     }
 
     private void runPush(CommandSender sender) {
+        runPush(sender, null);
+    }
+
+    private void runPush(CommandSender sender, GitPushService.SourceFileSnapshot sourceBeforePack) {
         sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting git push for ItemsAdder generated.zip...");
         PushProgressDisplay progressDisplay = new PushProgressDisplay(sender);
         progressDisplay.start();
@@ -141,7 +154,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             Exception failure = null;
 
             try {
-                result = new GitPushService(plugin, progressDisplay::update).pushGeneratedZip();
+                result = new GitPushService(plugin, progressDisplay::update).pushGeneratedZip(sourceBeforePack);
             } catch (GitPushException exception) {
                 failure = exception;
             } catch (Exception exception) {

@@ -29,3 +29,10 @@ start:
 
   # Delay after /iazip before /iaauto push starts. Increase this for larger packs.
   push-delay-seconds: 10
+
+  # After /iazip, wait until generated.zip has actually refreshed before pushing.
+  source-refresh-timeout-seconds: 120
+
+  # Once refreshed, require generated.zip metadata to stay unchanged for this long.
+  source-stable-seconds: 2
+  source-poll-interval-millis: 500
