@@ -1,0 +1,19 @@
+name: AIAuto
+version: 1.0.0
+main: com.aiauto.AIAutoPlugin
+api-version: '1.20.6'
+description: Pushes ItemsAdder generated.zip through local git.
+author: AIAuto
+
+commands:
+  aiauto:
+    description: Runs AIAuto commands.
+    usage: /aiauto push
+
+permissions:
+  aiauto.push:
+    description: Allows /aiauto push.
+    default: op
+  aiauto.reload:
+    description: Allows /aiauto reload.
+    default: op

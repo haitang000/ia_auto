@@ -1,0 +1,24 @@
+git:
+  # Local git executable. Keep "git" when git is already on the server PATH.
+  executable: "git"
+
+  # HTTPS or SSH URL of the GitHub repository.
+  # Example HTTPS: https://github.com/owner/repository.git
+  # Example SSH: git@github.com:owner/repository.git
+  remote-url: ""
+
+  # Branch to commit and push to.
+  branch: "main"
+
+  # Relative paths are resolved from the Minecraft server root.
+  source-file: "plugins/ItemsAdder/output/generated.zip"
+  repository-directory: "plugins/AIAuto/repository"
+  repository-file: "generated.zip"
+
+  commit-message: "Update ItemsAdder generated.zip"
+  timeout-seconds: 120
+
+  # Optional per-repository commit identity. Leave blank to use local/global git config.
+  author:
+    name: ""
+    email: ""
