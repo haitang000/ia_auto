@@ -32,11 +32,11 @@ jobs:
       - name: Package with Maven
         run: mvn --batch-mode package
 
-      - name: Prepare release jar
+      - name: Prepare plugin jar
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir -p dist
-          cp target/*.jar dist/IAAuto.jar
+          cp target/iaauto-*.jar dist/IAAuto.jar
 
       - name: Publish plugin jar
         if: startsWith(github.ref, 'refs/tags/')
