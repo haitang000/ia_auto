@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-group = "com.aiauto"
+group = "com.iaauto"
 version = "1.0.0"
 
 java {

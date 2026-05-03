@@ -1,6 +1,6 @@
-package com.aiauto.git;
+package com.iaauto.git;
 
-import com.aiauto.AIAutoPlugin;
+import com.iaauto.IAAutoPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -25,14 +25,14 @@ public final class GitPushService {
     private final Path serverRoot;
     private final GitConfig config;
 
-    public GitPushService(AIAutoPlugin plugin) {
+    public GitPushService(IAAutoPlugin plugin) {
         this.serverRoot = plugin.getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
         this.config = GitConfig.from(plugin.getConfig());
     }
 
     public PushResult pushGeneratedZip() throws GitPushException {
         if (isBlank(config.remoteUrl())) {
-            throw new GitPushException("git.remote-url is empty. Configure it in plugins/AIAuto/config.yml.");
+            throw new GitPushException("git.remote-url is empty. Configure it in plugins/IAAuto/config.yml.");
         }
 
         Path sourceFile = resolveServerPath(config.sourceFile());
@@ -331,7 +331,7 @@ public final class GitPushService {
                     getString(configuration, "git.remote-url", ""),
                     getString(configuration, "git.branch", "main"),
                     getString(configuration, "git.source-file", "plugins/ItemsAdder/output/generated.zip"),
-                    getString(configuration, "git.repository-directory", "plugins/AIAuto/repository"),
+                    getString(configuration, "git.repository-directory", "plugins/IAAuto/repository"),
                     getString(configuration, "git.repository-file", "generated.zip"),
                     getString(configuration, "git.commit-message", "Update ItemsAdder generated.zip"),
                     Math.max(5L, configuration.getLong("git.timeout-seconds", 120L)),

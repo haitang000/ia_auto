@@ -1,4 +1,4 @@
-package com.aiauto.git;
+package com.iaauto.git;
 
 public final class GitPushException extends Exception {
     public GitPushException(String message) {

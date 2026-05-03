@@ -12,7 +12,7 @@ git:
 
   # Relative paths are resolved from the Minecraft server root.
   source-file: "plugins/ItemsAdder/output/generated.zip"
-  repository-directory: "plugins/AIAuto/repository"
+  repository-directory: "plugins/IAAuto/repository"
   repository-file: "generated.zip"
 
   commit-message: "Update ItemsAdder generated.zip"

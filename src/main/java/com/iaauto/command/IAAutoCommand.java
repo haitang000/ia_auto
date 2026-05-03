@@ -1,9 +1,9 @@
-package com.aiauto.command;
+package com.iaauto.command;
 
-import com.aiauto.AIAutoPlugin;
-import com.aiauto.git.GitPushException;
-import com.aiauto.git.GitPushService;
-import com.aiauto.git.PushResult;
+import com.iaauto.IAAutoPlugin;
+import com.iaauto.git.GitPushException;
+import com.iaauto.git.GitPushService;
+import com.iaauto.git.PushResult;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -18,14 +18,14 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
-public final class AIAutoCommand implements CommandExecutor, TabCompleter {
-    private static final String PREFIX = ChatColor.AQUA + "[AIAuto] " + ChatColor.RESET;
+public final class IAAutoCommand implements CommandExecutor, TabCompleter {
+    private static final String PREFIX = ChatColor.AQUA + "[IAAuto] " + ChatColor.RESET;
     private static final List<String> SUBCOMMANDS = List.of("push", "reload");
 
-    private final AIAutoPlugin plugin;
+    private final IAAutoPlugin plugin;
     private final AtomicBoolean pushRunning = new AtomicBoolean(false);
 
-    public AIAutoCommand(AIAutoPlugin plugin) {
+    public IAAutoCommand(IAAutoPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -60,12 +60,12 @@ public final class AIAutoCommand implements CommandExecutor, TabCompleter {
         String prefix = args[0].toLowerCase(Locale.ROOT);
         return SUBCOMMANDS.stream()
                 .filter(subcommand -> subcommand.startsWith(prefix))
-                .filter(subcommand -> sender.hasPermission("aiauto." + subcommand))
+                .filter(subcommand -> sender.hasPermission("iaauto." + subcommand))
                 .toList();
     }
 
     private void push(CommandSender sender) {
-        if (!sender.hasPermission("aiauto.push")) {
+        if (!sender.hasPermission("iaauto.push")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
@@ -99,7 +99,7 @@ public final class AIAutoCommand implements CommandExecutor, TabCompleter {
     }
 
     private void reload(CommandSender sender) {
-        if (!sender.hasPermission("aiauto.reload")) {
+        if (!sender.hasPermission("iaauto.reload")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
@@ -130,7 +130,7 @@ public final class AIAutoCommand implements CommandExecutor, TabCompleter {
 
     private void sendUsage(CommandSender sender, String label) {
         sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage: /" + label + " push");
-        if (sender.hasPermission("aiauto.reload")) {
+        if (sender.hasPermission("iaauto.reload")) {
             sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage: /" + label + " reload");
         }
     }

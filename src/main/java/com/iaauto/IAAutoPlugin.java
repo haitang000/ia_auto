@@ -1,22 +1,22 @@
-package com.aiauto;
+package com.iaauto;
 
-import com.aiauto.command.AIAutoCommand;
+import com.iaauto.command.IAAutoCommand;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class AIAutoPlugin extends JavaPlugin {
+public final class IAAutoPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
 
-        PluginCommand command = getCommand("aiauto");
+        PluginCommand command = getCommand("iaauto");
         if (command == null) {
-            getLogger().severe("Command 'aiauto' is missing from plugin.yml.");
+            getLogger().severe("Command 'iaauto' is missing from plugin.yml.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        AIAutoCommand commandHandler = new AIAutoCommand(this);
+        IAAutoCommand commandHandler = new IAAutoCommand(this);
         command.setExecutor(commandHandler);
         command.setTabCompleter(commandHandler);
     }

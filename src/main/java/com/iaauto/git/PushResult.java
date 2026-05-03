@@ -1,4 +1,4 @@
-package com.aiauto.git;
+package com.iaauto.git;
 
 public record PushResult(
         boolean committed,

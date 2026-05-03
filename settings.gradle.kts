@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AIAuto"
+rootProject.name = "IAAuto"
