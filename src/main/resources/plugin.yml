@@ -1,25 +1,25 @@
-name: IAAuto
-version: 1.0.0
+name: NekoAutoPack
+version: 0.1.0
 main: com.iaauto.IAAutoPlugin
 api-version: '1.20.6'
 description: Packages and pushes ItemsAdder generated.zip through local git.
-author: IAAuto
+author: NekoAutoPack
 
 commands:
-  iaauto:
-    description: Runs IAAuto commands.
-    usage: /iaauto <help|start|push|reload>
+  nap:
+    description: Runs NekoAutoPack commands.
+    usage: /nap <help|start|push|reload>
 
 permissions:
-  iaauto.help:
-    description: Allows /iaauto help.
+  nap.help:
+    description: Allows /nap help.
     default: true
-  iaauto.start:
-    description: Allows /iaauto start.
+  nap.start:
+    description: Allows /nap start.
     default: op
-  iaauto.push:
-    description: Allows /iaauto push.
+  nap.push:
+    description: Allows /nap push.
     default: op
-  iaauto.reload:
-    description: Allows /iaauto reload.
+  nap.reload:
+    description: Allows /nap reload.
     default: op

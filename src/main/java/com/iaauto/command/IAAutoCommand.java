@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 public final class IAAutoCommand implements CommandExecutor, TabCompleter {
-    private static final String PREFIX = ChatColor.AQUA + "[IAAuto] " + ChatColor.RESET;
+    private static final String PREFIX = ChatColor.AQUA + "[NekoAutoPack] " + ChatColor.RESET;
     private static final List<String> SUBCOMMANDS = List.of("help", "start", "push", "reload");
     private static final long TICKS_PER_SECOND = 20L;
 
@@ -82,18 +82,18 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         String prefix = args[0].toLowerCase(Locale.ROOT);
         return SUBCOMMANDS.stream()
                 .filter(subcommand -> subcommand.startsWith(prefix))
-                .filter(subcommand -> sender.hasPermission("iaauto." + subcommand))
+                .filter(subcommand -> sender.hasPermission("nap." + subcommand))
                 .toList();
     }
 
     private void push(CommandSender sender) {
-        if (!sender.hasPermission("iaauto.push")) {
+        if (!sender.hasPermission("nap.push")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
 
         if (!operationRunning.compareAndSet(false, true)) {
-            sender.sendMessage(PREFIX + ChatColor.YELLOW + "An IAAuto operation is already running.");
+            sender.sendMessage(PREFIX + ChatColor.YELLOW + "A NekoAutoPack operation is already running.");
             return;
         }
 
@@ -101,13 +101,13 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     }
 
     private void start(CommandSender sender) {
-        if (!sender.hasPermission("iaauto.start")) {
+        if (!sender.hasPermission("nap.start")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
 
         if (!operationRunning.compareAndSet(false, true)) {
-            sender.sendMessage(PREFIX + ChatColor.YELLOW + "An IAAuto operation is already running.");
+            sender.sendMessage(PREFIX + ChatColor.YELLOW + "A NekoAutoPack operation is already running.");
             return;
         }
 
@@ -141,12 +141,12 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
         long delaySeconds = configuredPushDelaySeconds();
         if (delaySeconds <= 0L) {
-            sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /iaauto push...");
+            sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /nap push...");
             runPush(sender, sourceBeforePack);
             return;
         }
 
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /iaauto push in " + delaySeconds + " seconds...");
+        sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /nap push in " + delaySeconds + " seconds...");
         Bukkit.getScheduler().runTaskLater(plugin, () -> runPush(sender, sourceBeforePack), delaySeconds * TICKS_PER_SECOND);
     }
 
@@ -184,7 +184,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     }
 
     private void reload(CommandSender sender) {
-        if (!sender.hasPermission("iaauto.reload")) {
+        if (!sender.hasPermission("nap.reload")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
@@ -230,20 +230,20 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender, String label) {
-        if (!sender.hasPermission("iaauto.help")) {
+        if (!sender.hasPermission("nap.help")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
             return;
         }
 
         sender.sendMessage(PREFIX + ChatColor.GOLD + "Commands:");
         sender.sendMessage(ChatColor.YELLOW + "/" + label + " help" + ChatColor.GRAY + " - Show this help message.");
-        if (sender.hasPermission("iaauto.start")) {
+        if (sender.hasPermission("nap.start")) {
             sender.sendMessage(ChatColor.YELLOW + "/" + label + " start" + ChatColor.GRAY + " - Run the pack command, then push generated.zip.");
         }
-        if (sender.hasPermission("iaauto.push")) {
+        if (sender.hasPermission("nap.push")) {
             sender.sendMessage(ChatColor.YELLOW + "/" + label + " push" + ChatColor.GRAY + " - Push the latest generated.zip to git.");
         }
-        if (sender.hasPermission("iaauto.reload")) {
+        if (sender.hasPermission("nap.reload")) {
             sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " - Reload the plugin configuration.");
         }
     }
@@ -278,7 +278,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             }
 
             bossBar = Bukkit.createBossBar(
-                    ChatColor.AQUA + "IAAuto push: starting...",
+                    ChatColor.AQUA + "NekoAutoPack push: starting...",
                     BarColor.BLUE,
                     BarStyle.SEGMENTED_20
             );
@@ -299,7 +299,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
                 }
 
                 bossBar.setColor(BarColor.BLUE);
-                bossBar.setTitle(ChatColor.AQUA + "IAAuto push " + snapshot.percent() + "% " + ChatColor.WHITE + snapshot.message());
+                bossBar.setTitle(ChatColor.AQUA + "NekoAutoPack push " + snapshot.percent() + "% " + ChatColor.WHITE + snapshot.message());
                 bossBar.setProgress(snapshot.progress());
             });
         }
@@ -318,11 +318,11 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
             if (failure == null) {
                 bossBar.setColor(BarColor.GREEN);
-                bossBar.setTitle(ChatColor.GREEN + "IAAuto push complete");
+                bossBar.setTitle(ChatColor.GREEN + "NekoAutoPack push complete");
                 bossBar.setProgress(1.0D);
             } else {
                 bossBar.setColor(BarColor.RED);
-                bossBar.setTitle(ChatColor.RED + "IAAuto push failed");
+                bossBar.setTitle(ChatColor.RED + "NekoAutoPack push failed");
                 bossBar.setProgress(1.0D);
             }
 

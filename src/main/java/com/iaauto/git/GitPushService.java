@@ -59,7 +59,7 @@ public final class GitPushService {
     public PushResult pushGeneratedZip(SourceFileSnapshot previousSourceSnapshot) throws GitPushException {
         reportProgress(0.02D, "Validating git configuration");
         if (isBlank(config.remoteUrl())) {
-            throw new GitPushException("git.remote-url is empty. Configure it in plugins/IAAuto/config.yml.");
+            throw new GitPushException("git.remote-url is empty. Configure it in plugins/NekoAutoPack/config.yml.");
         }
 
         reportProgress(0.08D, "Checking ItemsAdder generated.zip");
@@ -212,7 +212,7 @@ public final class GitPushService {
     }
 
     private void rebuildUnpublishedBranch(Path repositoryDirectory) throws GitPushException {
-        String temporaryBranch = "iaauto-rebuild-" + System.nanoTime();
+        String temporaryBranch = "nap-rebuild-" + System.nanoTime();
         runGitOrThrow(repositoryDirectory, "reset", "--hard");
         runGitOrThrow(repositoryDirectory, "checkout", "--orphan", temporaryBranch);
         runGitOrThrow(repositoryDirectory, "rm", "-r", "--cached", "--ignore-unmatch", ".");
@@ -730,7 +730,7 @@ public final class GitPushService {
                     getString(configuration, "git.remote-url", ""),
                     getString(configuration, "git.branch", "main"),
                     getString(configuration, "git.source-file", "plugins/ItemsAdder/output/generated.zip"),
-                    getString(configuration, "git.repository-directory", "plugins/IAAuto/repository"),
+                    getString(configuration, "git.repository-directory", "plugins/NekoAutoPack/repository"),
                     getString(configuration, "git.repository-file", "generated.zip"),
                     getString(configuration, "git.commit-message", "Update ItemsAdder generated.zip"),
                     Math.max(5L, configuration.getLong("git.timeout-seconds", 120L)),

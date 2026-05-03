@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.iaauto</groupId>
-    <artifactId>iaauto</artifactId>
-    <version>1.0.0</version>
+    <artifactId>nekoautopack</artifactId>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>IAAuto</name>
+    <name>NekoAutoPack</name>
     <description>Pushes the ItemsAdder generated.zip file to a configured GitHub repository.</description>
 
     <properties>

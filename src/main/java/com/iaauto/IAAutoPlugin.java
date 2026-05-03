@@ -9,9 +9,9 @@ public final class IAAutoPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        PluginCommand command = getCommand("iaauto");
+        PluginCommand command = getCommand("nap");
         if (command == null) {
-            getLogger().severe("Command 'iaauto' is missing from plugin.yml.");
+            getLogger().severe("Command 'nap' is missing from plugin.yml.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }

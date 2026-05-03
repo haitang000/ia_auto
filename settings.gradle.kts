@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "IAAuto"
+rootProject.name = "NekoAutoPack"

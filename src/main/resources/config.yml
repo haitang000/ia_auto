@@ -11,9 +11,9 @@ git:
   branch: "main"
 
   # Relative paths are resolved from the Minecraft server root.
-  # repository-directory is managed by IAAuto; unpublished local commits may be reset before pushing.
+  # repository-directory is managed by NekoAutoPack; unpublished local commits may be reset before pushing.
   source-file: "plugins/ItemsAdder/output/generated.zip"
-  repository-directory: "plugins/IAAuto/repository"
+  repository-directory: "plugins/NekoAutoPack/repository"
   repository-file: "generated.zip"
 
   commit-message: "Update ItemsAdder generated.zip"
@@ -25,10 +25,10 @@ git:
     email: ""
 
 start:
-  # Command run by /iaauto start before pushing. Do not include the leading slash.
+  # Command run by /nap start before pushing. Do not include the leading slash.
   pack-command: "iazip"
 
-  # Delay after /iazip before /iaauto push starts. Increase this for larger packs.
+  # Delay after /iazip before /nap push starts. Increase this for larger packs.
   push-delay-seconds: 10
 
   # After /iazip, wait until generated.zip has actually refreshed before pushing.
