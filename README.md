@@ -1,5 +1,8 @@
 # NekoAutoPack
 
+> [!WARNING]
+> This plugin requires ItemsAdder as a dependency.
+
 NekoAutoPack is a Paper plugin for Minecraft 1.20.6 and newer. It adds `/nap start`, which runs ItemsAdder's `/iazip`, then runs `/nap push`. The push command copies `plugins/ItemsAdder/output/generated.zip` into a local git repository and pushes it to a configured GitHub remote.
 
 ## Build
@@ -62,3 +65,73 @@ Permissions:
 - `nap.start` for `/nap start`
 - `nap.push` for `/nap push`
 - `nap.reload` for `/nap reload`
+
+---
+
+# NekoAutoPack 中文版
+
+> [!WARNING]
+> 本插件需要 ItemsAdder 插件作为前置。
+
+NekoAutoPack 是一个适用于 Minecraft 1.20.6+ 的 Paper 插件。`/nap start` 会先执行 ItemsAdder 的 `/iazip`，再通过 `/nap push` 将 `plugins/ItemsAdder/output/generated.zip` 复制到本地 git 仓库并推送到 GitHub。
+
+## 构建
+
+需要 Java 21。
+
+```bash
+gradle clean build
+```
+
+或者：
+
+```bash
+mvn clean package
+```
+
+插件 jar 会生成在 `build/libs/` 或 `target/`。
+
+## 服务器设置
+
+1. 将构建好的 jar 放入服务器的 `plugins` 文件夹。
+2. 启动一次服务器，生成 `plugins/NekoAutoPack/config.yml`。
+3. 设置 `git.remote-url` 为你的 GitHub 仓库 URL。
+4. 确保服务器进程可以运行 `git`，并已配置 GitHub 认证，例如 SSH 密钥或 Git Credential Manager。
+5. 运行 `/nap start`。
+
+使用 `/nap help` 或 `/nap` 查看可用命令。
+
+默认源文件：
+
+```yaml
+git:
+  source-file: "plugins/ItemsAdder/output/generated.zip"
+```
+
+默认仓库位置：
+
+```yaml
+git:
+  repository-directory: "plugins/NekoAutoPack/repository"
+  repository-file: "generated.zip"
+```
+
+`repository-directory` 会被视为插件管理的 git 检出目录。每次复制前，插件会拉取配置分支，并将本地未发布历史重置到远程分支，避免上一次失败的本地提交被重复推送。
+
+`/nap start` 会从控制台运行 `/iazip`，等待 `generated.zip` 刷新并稳定后再推送。资源包生成较慢时，可以调大这些配置：
+
+```yaml
+start:
+  pack-command: "iazip"
+  push-delay-seconds: 10
+  source-refresh-timeout-seconds: 120
+  source-stable-seconds: 2
+  source-poll-interval-millis: 500
+```
+
+权限：
+
+- `nap.help` 用于 `/nap help`
+- `nap.start` 用于 `/nap start`
+- `nap.push` 用于 `/nap push`
+- `nap.reload` 用于 `/nap reload`
