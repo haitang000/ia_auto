@@ -1,3 +1,5 @@
+language: "en" # Supported: en, zh_cn
+
 git:
   # Local git executable. Keep "git" when git is already on the server PATH.
   executable: "git"

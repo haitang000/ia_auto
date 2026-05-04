@@ -1,5 +1,5 @@
 name: NekoAutoPack
-version: 0.1.0
+version: 0.1.1
 main: com.iaauto.IAAutoPlugin
 api-version: '1.20.6'
 description: Packages and pushes ItemsAdder generated.zip through local git.

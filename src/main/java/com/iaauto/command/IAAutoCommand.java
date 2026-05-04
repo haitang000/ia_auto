@@ -5,6 +5,7 @@ import com.iaauto.git.GitPushException;
 import com.iaauto.git.GitPushService;
 import com.iaauto.git.PushProgress;
 import com.iaauto.git.PushResult;
+import com.iaauto.i18n.Messages;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.boss.BarColor;
@@ -88,12 +89,12 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
     private void push(CommandSender sender) {
         if (!sender.hasPermission("nap.push")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.permission-denied"));
             return;
         }
 
         if (!operationRunning.compareAndSet(false, true)) {
-            sender.sendMessage(PREFIX + ChatColor.YELLOW + "A NekoAutoPack operation is already running.");
+            sender.sendMessage(PREFIX + ChatColor.YELLOW + messages().text("command.operation-running"));
             return;
         }
 
@@ -102,12 +103,12 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
     private void start(CommandSender sender) {
         if (!sender.hasPermission("nap.start")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.permission-denied"));
             return;
         }
 
         if (!operationRunning.compareAndSet(false, true)) {
-            sender.sendMessage(PREFIX + ChatColor.YELLOW + "A NekoAutoPack operation is already running.");
+            sender.sendMessage(PREFIX + ChatColor.YELLOW + messages().text("command.operation-running"));
             return;
         }
 
@@ -121,32 +122,32 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Running /" + packCommand + "...");
+        sender.sendMessage(PREFIX + ChatColor.GRAY + messages().text("command.running-pack", packCommand));
 
         boolean dispatched;
         try {
             dispatched = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), packCommand);
         } catch (CommandException exception) {
             operationRunning.set(false);
-            plugin.getLogger().log(Level.SEVERE, "Failed to run /" + packCommand + ".", exception);
-            sender.sendMessage(PREFIX + ChatColor.RED + "Failed to run /" + packCommand + ": " + compactFailure(exception));
+            plugin.getLogger().log(Level.SEVERE, messages().text("log.pack-failed", packCommand), exception);
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.pack-failed", packCommand, compactFailure(exception)));
             return;
         }
 
         if (!dispatched) {
             operationRunning.set(false);
-            sender.sendMessage(PREFIX + ChatColor.RED + "Command /" + packCommand + " was not found or could not be run.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.pack-missing", packCommand));
             return;
         }
 
         long delaySeconds = configuredPushDelaySeconds();
         if (delaySeconds <= 0L) {
-            sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /nap push...");
+            sender.sendMessage(PREFIX + ChatColor.GRAY + messages().text("command.starting-push"));
             runPush(sender, sourceBeforePack);
             return;
         }
 
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting /nap push in " + delaySeconds + " seconds...");
+        sender.sendMessage(PREFIX + ChatColor.GRAY + messages().text("command.starting-push-delayed", delaySeconds));
         Bukkit.getScheduler().runTaskLater(plugin, () -> runPush(sender, sourceBeforePack), delaySeconds * TICKS_PER_SECOND);
     }
 
@@ -155,8 +156,9 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     }
 
     private void runPush(CommandSender sender, GitPushService.SourceFileSnapshot sourceBeforePack) {
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Starting git push for ItemsAdder generated.zip...");
-        PushProgressDisplay progressDisplay = new PushProgressDisplay(sender);
+        Messages messages = messages();
+        sender.sendMessage(PREFIX + ChatColor.GRAY + messages.text("command.git-push-start"));
+        PushProgressDisplay progressDisplay = new PushProgressDisplay(sender, messages);
         progressDisplay.start();
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -169,7 +171,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
                 failure = exception;
             } catch (Exception exception) {
                 failure = exception;
-                plugin.getLogger().log(Level.SEVERE, "Unexpected error while pushing generated.zip.", exception);
+                plugin.getLogger().log(Level.SEVERE, messages.text("log.unexpected-push-error"), exception);
             } finally {
                 operationRunning.set(false);
             }
@@ -185,12 +187,12 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
     private void reload(CommandSender sender) {
         if (!sender.hasPermission("nap.reload")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.permission-denied"));
             return;
         }
 
         plugin.reloadConfig();
-        sender.sendMessage(PREFIX + ChatColor.GREEN + "Configuration reloaded.");
+        sender.sendMessage(PREFIX + ChatColor.GREEN + messages().text("command.reload-complete"));
     }
 
     private String configuredPackCommand() {
@@ -216,36 +218,41 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         }
 
         if (result == null) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Push finished without a result.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.push-no-result"));
             return;
         }
 
         if (result.committed()) {
-            sender.sendMessage(PREFIX + ChatColor.GREEN + "generated.zip was committed and pushed to origin/" + result.branch() + ".");
+            sender.sendMessage(PREFIX + ChatColor.GREEN + messages().text("command.push-committed", result.branch()));
         } else {
-            sender.sendMessage(PREFIX + ChatColor.GREEN + "No file changes were found; origin/" + result.branch() + " was checked.");
+            sender.sendMessage(PREFIX + ChatColor.GREEN + messages().text("command.push-no-changes", result.branch()));
         }
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Repository: " + result.repositoryDirectory());
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Tracked file: " + result.repositoryFile());
+        sender.sendMessage(PREFIX + ChatColor.GRAY + messages().text("command.repository", result.repositoryDirectory()));
+        sender.sendMessage(PREFIX + ChatColor.GRAY + messages().text("command.tracked-file", result.repositoryFile()));
     }
 
     private void sendHelp(CommandSender sender, String label) {
         if (!sender.hasPermission("nap.help")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "You do not have permission to run this command.");
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.permission-denied"));
             return;
         }
 
-        sender.sendMessage(PREFIX + ChatColor.GOLD + "Commands:");
-        sender.sendMessage(ChatColor.YELLOW + "/" + label + " help" + ChatColor.GRAY + " - Show this help message.");
+        Messages messages = messages();
+        sender.sendMessage(PREFIX + ChatColor.GOLD + messages.text("help.header"));
+        sender.sendMessage(ChatColor.YELLOW + "/" + label + " help" + ChatColor.GRAY + " - " + messages.text("help.help"));
         if (sender.hasPermission("nap.start")) {
-            sender.sendMessage(ChatColor.YELLOW + "/" + label + " start" + ChatColor.GRAY + " - Run the pack command, then push generated.zip.");
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " start" + ChatColor.GRAY + " - " + messages.text("help.start"));
         }
         if (sender.hasPermission("nap.push")) {
-            sender.sendMessage(ChatColor.YELLOW + "/" + label + " push" + ChatColor.GRAY + " - Push the latest generated.zip to git.");
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " push" + ChatColor.GRAY + " - " + messages.text("help.push"));
         }
         if (sender.hasPermission("nap.reload")) {
-            sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " - Reload the plugin configuration.");
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " - " + messages.text("help.reload"));
         }
+    }
+
+    private Messages messages() {
+        return Messages.from(plugin.getConfig());
     }
 
     private String compactFailure(Exception failure) {
@@ -260,25 +267,27 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         private static final int TITLE_LIMIT = 64;
 
         private final CommandSender sender;
+        private final Messages messages;
         private BossBar bossBar;
         private int lastLoggedPercent = -1;
         private String lastLoggedMessage = "";
         private double lastVisibleProgress;
         private boolean finished;
 
-        private PushProgressDisplay(CommandSender sender) {
+        private PushProgressDisplay(CommandSender sender, Messages messages) {
             this.sender = sender;
+            this.messages = messages;
         }
 
         private void start() {
-            plugin.getLogger().info("[push 0%] Starting git push for ItemsAdder generated.zip");
+            plugin.getLogger().info("[push 0%] " + messages.text("progress.initial"));
 
             if (!(sender instanceof Player player)) {
                 return;
             }
 
             bossBar = Bukkit.createBossBar(
-                    ChatColor.AQUA + "NekoAutoPack push: starting...",
+                    ChatColor.AQUA + messages.text("boss.starting"),
                     BarColor.BLUE,
                     BarStyle.SEGMENTED_20
             );
@@ -299,7 +308,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
                 }
 
                 bossBar.setColor(BarColor.BLUE);
-                bossBar.setTitle(ChatColor.AQUA + "NekoAutoPack push " + snapshot.percent() + "% " + ChatColor.WHITE + snapshot.message());
+                bossBar.setTitle(ChatColor.AQUA + messages.text("boss.progress", snapshot.percent(), ChatColor.WHITE + snapshot.message()));
                 bossBar.setProgress(snapshot.progress());
             });
         }
@@ -307,7 +316,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         private void finish(Exception failure) {
             finished = true;
             if (failure == null) {
-                logProgress(100, "Push finished");
+                logProgress(100, messages.text("progress.finished"));
             } else {
                 plugin.getLogger().warning("[push failed] " + compactProgressMessage(compactFailure(failure)));
             }
@@ -318,11 +327,11 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
             if (failure == null) {
                 bossBar.setColor(BarColor.GREEN);
-                bossBar.setTitle(ChatColor.GREEN + "NekoAutoPack push complete");
+                bossBar.setTitle(ChatColor.GREEN + messages.text("boss.complete"));
                 bossBar.setProgress(1.0D);
             } else {
                 bossBar.setColor(BarColor.RED);
-                bossBar.setTitle(ChatColor.RED + "NekoAutoPack push failed");
+                bossBar.setTitle(ChatColor.RED + messages.text("boss.failed"));
                 bossBar.setProgress(1.0D);
             }
 
@@ -348,7 +357,7 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         }
 
         private String compactProgressMessage(String message) {
-            String compact = Objects.toString(message, "Working...").replace('\r', ' ').replace('\n', ' ').trim();
+            String compact = Objects.toString(message, messages.text("progress.default")).replace('\r', ' ').replace('\n', ' ').trim();
             if (compact.length() <= TITLE_LIMIT) {
                 return compact;
             }

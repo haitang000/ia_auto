@@ -31,6 +31,12 @@ The plugin jar will be under `build/libs/` for Gradle or `target/` for Maven.
 
 Use `/nap help` or `/nap` in game or from the console to list the commands available to the sender.
 
+Language defaults to English. Use `en` or `zh_cn`:
+
+```yaml
+language: "en"
+```
+
 Default source file:
 
 ```yaml
@@ -100,6 +106,12 @@ mvn clean package
 5. 运行 `/nap start`。
 
 使用 `/nap help` 或 `/nap` 查看可用命令。
+
+插件消息默认使用英语。将 `language` 设置为 `zh_cn` 可以切换为中文：
+
+```yaml
+language: "zh_cn"
+```
 
 默认源文件：
 

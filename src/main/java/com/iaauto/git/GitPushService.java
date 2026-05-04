@@ -1,6 +1,7 @@
 package com.iaauto.git;
 
 import com.iaauto.IAAutoPlugin;
+import com.iaauto.i18n.Messages;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -34,6 +35,7 @@ import java.util.zip.ZipFile;
 public final class GitPushService {
     private final Path serverRoot;
     private final GitConfig config;
+    private final Messages messages;
     private final Consumer<PushProgress> progressListener;
 
     public GitPushService(IAAutoPlugin plugin) {
@@ -44,6 +46,7 @@ public final class GitPushService {
     public GitPushService(IAAutoPlugin plugin, Consumer<PushProgress> progressListener) {
         this.serverRoot = plugin.getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
         this.config = GitConfig.from(plugin.getConfig());
+        this.messages = Messages.from(plugin.getConfig());
         this.progressListener = progressListener == null ? progress -> {
         } : progressListener;
     }
@@ -57,23 +60,23 @@ public final class GitPushService {
     }
 
     public PushResult pushGeneratedZip(SourceFileSnapshot previousSourceSnapshot) throws GitPushException {
-        reportProgress(0.02D, "Validating git configuration");
+        reportProgress(0.02D, text("git.progress.validating-config"));
         if (isBlank(config.remoteUrl())) {
-            throw new GitPushException("git.remote-url is empty. Configure it in plugins/NekoAutoPack/config.yml.");
+            throw new GitPushException(text("git.error.remote-url-empty"));
         }
 
-        reportProgress(0.08D, "Checking ItemsAdder generated.zip");
+        reportProgress(0.08D, text("git.progress.checking-source"));
         Path sourceFile = resolveServerPath(config.sourceFile());
         SourceFileSnapshot sourceSnapshot = waitForReadySourceFile(sourceFile, previousSourceSnapshot);
 
-        reportProgress(0.14D, "Preparing local repository");
+        reportProgress(0.14D, text("git.progress.preparing-repository"));
         Path repositoryDirectory = resolveServerPath(config.repositoryDirectory());
         ensureRepository(repositoryDirectory);
 
-        reportProgress(0.34D, "Applying git author configuration");
+        reportProgress(0.34D, text("git.progress.applying-author"));
         applyAuthorConfig(repositoryDirectory);
 
-        reportProgress(0.42D, "Copying generated.zip into the repository");
+        reportProgress(0.42D, text("git.progress.copying-source"));
         Path repositoryFile = resolveInsideRepository(repositoryDirectory, config.repositoryFile());
         Path repositoryFileParent = repositoryFile.getParent();
         if (repositoryFileParent != null) {
@@ -81,23 +84,23 @@ public final class GitPushService {
         }
         copySourceToRepository(sourceFile, repositoryFile, sourceSnapshot);
 
-        reportProgress(0.52D, "Staging generated.zip");
+        reportProgress(0.52D, text("git.progress.staging-source"));
         String gitFilePath = toGitPath(repositoryDirectory.relativize(repositoryFile));
         runGitOrThrow(repositoryDirectory, "add", "--", gitFilePath);
 
-        reportProgress(0.60D, "Checking repository changes");
+        reportProgress(0.60D, text("git.progress.checking-changes"));
         CommandResult status = runGitOrThrow(repositoryDirectory, "status", "--porcelain", "--", gitFilePath);
         boolean committed = !status.output().isBlank();
         if (committed) {
-            reportProgress(0.68D, "Committing generated.zip");
+            reportProgress(0.68D, text("git.progress.committing-source"));
             runGitOrThrow(repositoryDirectory, "commit", "-m", config.commitMessage(), "--", gitFilePath);
         } else {
-            reportProgress(0.68D, "No file changes found; verifying remote branch");
+            reportProgress(0.68D, text("git.progress.no-changes"));
         }
 
-        reportProgress(0.76D, "Pushing to origin/" + config.branch());
-        runGitOrThrow(repositoryDirectory, new ProgressRange(0.76D, 0.98D, "Git push"), "push", "--progress", "-u", "origin", config.branch());
-        reportProgress(1.0D, "Push finished");
+        reportProgress(0.76D, text("git.progress.pushing", config.branch()));
+        runGitOrThrow(repositoryDirectory, new ProgressRange(0.76D, 0.98D, text("git.progress.git-push")), "push", "--progress", "-u", "origin", config.branch());
+        reportProgress(1.0D, text("git.progress.finished"));
         return new PushResult(committed, config.branch(), repositoryDirectory.toString(), gitFilePath);
     }
 
@@ -109,7 +112,7 @@ public final class GitPushService {
         }
 
         if (Files.exists(repositoryDirectory) && !isDirectoryEmpty(repositoryDirectory)) {
-            throw new GitPushException("Repository directory exists but is not an empty git repository: " + repositoryDirectory);
+            throw new GitPushException(text("git.error.repository-not-empty", repositoryDirectory));
         }
 
         cloneRepository(repositoryDirectory);
@@ -120,10 +123,10 @@ public final class GitPushService {
     private void cloneRepository(Path repositoryDirectory) throws GitPushException {
         Path parent = repositoryDirectory.getParent();
         if (parent == null) {
-            throw new GitPushException("Repository directory must have a parent: " + repositoryDirectory);
+            throw new GitPushException(text("git.error.repository-no-parent", repositoryDirectory));
         }
 
-        reportProgress(0.18D, "Cloning repository");
+        reportProgress(0.18D, text("git.progress.cloning"));
         createDirectories(parent);
         String directoryName = repositoryDirectory.getFileName().toString();
         CommandResult clone = runGit(parent, List.of("clone", config.remoteUrl(), directoryName));
@@ -131,7 +134,7 @@ public final class GitPushService {
             return;
         }
 
-        reportProgress(0.24D, "Initializing local repository");
+        reportProgress(0.24D, text("git.progress.initializing"));
         createDirectories(repositoryDirectory);
         CommandResult init = runGit(repositoryDirectory, List.of("init"));
         if (init.exitCode() != 0) {
@@ -140,7 +143,7 @@ public final class GitPushService {
     }
 
     private void configureRemote(Path repositoryDirectory) throws GitPushException {
-        reportProgress(0.24D, "Configuring git remote");
+        reportProgress(0.24D, text("git.progress.configuring-remote"));
         CommandResult existingRemote = runGit(repositoryDirectory, List.of("remote", "get-url", "origin"));
         if (existingRemote.exitCode() == 0) {
             if (!Objects.equals(existingRemote.output().trim(), config.remoteUrl())) {
@@ -153,7 +156,7 @@ public final class GitPushService {
     }
 
     private void checkoutBranch(Path repositoryDirectory) throws GitPushException {
-        reportProgress(0.30D, "Checking out branch " + config.branch());
+        reportProgress(0.30D, text("git.progress.checkout-branch", config.branch()));
         CommandResult checkoutExisting = runGit(repositoryDirectory, List.of("checkout", config.branch()));
         if (checkoutExisting.exitCode() == 0) {
             return;
@@ -169,19 +172,19 @@ public final class GitPushService {
 
         String remoteBranch = remoteBranchRef();
         if (remoteBranchExists(repositoryDirectory, remoteBranch)) {
-            reportProgress(0.32D, "Resetting local branch to " + remoteBranch);
+            reportProgress(0.32D, text("git.progress.resetting-branch", remoteBranch));
             runGitOrThrow(repositoryDirectory, "reset", "--hard", remoteBranch);
             return;
         }
 
         if (hadLocalBranch && hasHead(repositoryDirectory)) {
-            reportProgress(0.32D, "Rebuilding unpublished local branch");
+            reportProgress(0.32D, text("git.progress.rebuilding-branch"));
             rebuildUnpublishedBranch(repositoryDirectory);
         }
     }
 
     private void fetchRemoteBranch(Path repositoryDirectory) throws GitPushException {
-        reportProgress(0.28D, "Fetching origin/" + config.branch());
+        reportProgress(0.28D, text("git.progress.fetching-branch", config.branch()));
         List<String> fetchArguments = List.of("fetch", "--prune", "origin",
                 "+refs/heads/" + config.branch() + ":" + remoteBranchRef());
         CommandResult fetch = runGit(repositoryDirectory, fetchArguments);
@@ -236,7 +239,7 @@ public final class GitPushService {
     private Path resolveServerPath(String configuredPath) throws GitPushException {
         String pathText = configuredPath == null ? "" : configuredPath.trim();
         if (pathText.isEmpty()) {
-            throw new GitPushException("A configured path is empty.");
+            throw new GitPushException(text("git.error.config-path-empty"));
         }
 
         pathText = stripServerRootPrefix(pathText);
@@ -248,7 +251,7 @@ public final class GitPushService {
             }
             return serverRoot.resolve(path).toAbsolutePath().normalize();
         } catch (InvalidPathException exception) {
-            throw new GitPushException("Invalid path in config: " + configuredPath, exception);
+            throw new GitPushException(text("git.error.invalid-config-path", configuredPath), exception);
         }
     }
 
@@ -262,12 +265,12 @@ public final class GitPushService {
 
     private Path resolveInsideRepository(Path repositoryDirectory, String repositoryFile) throws GitPushException {
         if (isBlank(repositoryFile)) {
-            throw new GitPushException("git.repository-file is empty.");
+            throw new GitPushException(text("git.error.repository-file-empty"));
         }
 
         Path resolved = repositoryDirectory.resolve(repositoryFile).normalize();
         if (!resolved.startsWith(repositoryDirectory)) {
-            throw new GitPushException("git.repository-file must stay inside the repository directory.");
+            throw new GitPushException(text("git.error.repository-file-outside"));
         }
         return resolved;
     }
@@ -279,11 +282,11 @@ public final class GitPushService {
         }
 
         if (comparableSnapshot != null) {
-            reportProgress(0.10D, "Waiting for generated.zip to refresh");
+            reportProgress(0.10D, text("git.progress.waiting-refresh"));
             waitForSourceRefresh(sourceFile, comparableSnapshot);
         }
 
-        reportProgress(0.12D, "Waiting for generated.zip writes to finish");
+        reportProgress(0.12D, text("git.progress.waiting-writes"));
         return waitForCompleteSourceFile(sourceFile);
     }
 
@@ -296,8 +299,7 @@ public final class GitPushService {
             }
 
             if (System.nanoTime() >= deadline) {
-                throw new GitPushException("Source file did not refresh within " + config.sourceRefreshTimeoutSeconds()
-                        + " seconds after running the pack command: " + sourceFile);
+                throw new GitPushException(text("git.error.source-refresh-timeout", config.sourceRefreshTimeoutSeconds(), sourceFile));
             }
 
             sleepUntilNextSourceCheck();
@@ -328,10 +330,9 @@ public final class GitPushService {
 
             if (System.nanoTime() >= deadline) {
                 if (lastSnapshot == null) {
-                    throw new GitPushException("Source file does not exist: " + sourceFile);
+                    throw new GitPushException(text("git.error.source-missing", sourceFile));
                 }
-                throw new GitPushException("Source file did not become stable within " + config.sourceRefreshTimeoutSeconds()
-                        + " seconds: " + sourceFile);
+                throw new GitPushException(text("git.error.source-stability-timeout", config.sourceRefreshTimeoutSeconds(), sourceFile));
             }
 
             sleepUntilNextSourceCheck();
@@ -348,7 +349,7 @@ public final class GitPushService {
                 return checkedSnapshot;
             }
 
-            reportProgress(0.13D, "generated.zip changed while being checked; waiting again");
+            reportProgress(0.13D, text("git.progress.changed-checking"));
         }
     }
 
@@ -360,7 +361,7 @@ public final class GitPushService {
             }
 
             if (System.nanoTime() >= deadline) {
-                throw new GitPushException("Source file is not a complete readable zip: " + sourceFile);
+                throw new GitPushException(text("git.error.source-unreadable-zip", sourceFile));
             }
 
             sleepUntilNextSourceCheck();
@@ -373,7 +374,7 @@ public final class GitPushService {
         } catch (ZipException | FileNotFoundException | NoSuchFileException | NotDirectoryException exception) {
             return false;
         } catch (IOException exception) {
-            throw new GitPushException("Failed to read source zip: " + sourceFile, exception);
+            throw new GitPushException(text("git.error.source-read-failed", sourceFile), exception);
         }
     }
 
@@ -383,7 +384,7 @@ public final class GitPushService {
             try {
                 Files.copy(sourceFile, repositoryFile, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException exception) {
-                throw new GitPushException("Failed to copy " + sourceFile + " to " + repositoryFile + ".", exception);
+                throw new GitPushException(text("git.error.copy-failed", sourceFile, repositoryFile), exception);
             }
 
             SourceFileSnapshot copiedSnapshot = snapshotSourceFile(sourceFile);
@@ -391,18 +392,18 @@ public final class GitPushService {
                 return;
             }
 
-            reportProgress(0.44D, "generated.zip changed while copying; retrying");
+            reportProgress(0.44D, text("git.progress.changed-copying"));
             stableSnapshot = waitForCompleteSourceFile(sourceFile);
         }
 
-        throw new GitPushException("Source file kept changing while being copied: " + sourceFile);
+        throw new GitPushException(text("git.error.source-kept-changing", sourceFile));
     }
 
     private boolean filesMatch(Path sourceFile, Path repositoryFile) throws GitPushException {
         try {
             return Files.mismatch(sourceFile, repositoryFile) == -1L;
         } catch (IOException exception) {
-            throw new GitPushException("Failed to verify copied generated.zip.", exception);
+            throw new GitPushException(text("git.error.verify-copy-failed"), exception);
         }
     }
 
@@ -419,7 +420,7 @@ public final class GitPushService {
         } catch (NoSuchFileException | NotDirectoryException exception) {
             return SourceFileSnapshot.missing(sourceFile);
         } catch (IOException exception) {
-            throw new GitPushException("Failed to inspect source file: " + sourceFile, exception);
+            throw new GitPushException(text("git.error.inspect-source-failed", sourceFile), exception);
         }
     }
 
@@ -428,7 +429,7 @@ public final class GitPushService {
             Thread.sleep(config.sourcePollIntervalMillis());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new GitPushException("Interrupted while waiting for generated.zip to refresh.", exception);
+            throw new GitPushException(text("git.error.wait-interrupted"), exception);
         }
     }
 
@@ -436,7 +437,7 @@ public final class GitPushService {
         try (var entries = Files.list(directory)) {
             return entries.findAny().isEmpty();
         } catch (IOException exception) {
-            throw new GitPushException("Failed to inspect directory: " + directory, exception);
+            throw new GitPushException(text("git.error.inspect-directory-failed", directory), exception);
         }
     }
 
@@ -444,7 +445,7 @@ public final class GitPushService {
         try {
             Files.createDirectories(directory);
         } catch (IOException exception) {
-            throw new GitPushException("Failed to create directory: " + directory, exception);
+            throw new GitPushException(text("git.error.create-directory-failed", directory), exception);
         }
     }
 
@@ -479,7 +480,7 @@ public final class GitPushService {
         try {
             process = builder.start();
         } catch (IOException exception) {
-            throw new GitPushException("Failed to start git executable '" + config.executable() + "'.", exception);
+            throw new GitPushException(text("git.error.start-failed", config.executable()), exception);
         }
 
         CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process.getInputStream(), progressRange));
@@ -489,12 +490,12 @@ public final class GitPushService {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
-            throw new GitPushException("Git command was interrupted: " + describeGitCommand(arguments), exception);
+            throw new GitPushException(text("git.error.interrupted", describeGitCommand(arguments)), exception);
         }
 
         if (!finished) {
             process.destroyForcibly();
-            throw new GitPushException("Git command timed out after " + config.timeoutSeconds() + " seconds: " + describeGitCommand(arguments));
+            throw new GitPushException(text("git.error.timed-out", config.timeoutSeconds(), describeGitCommand(arguments)));
         }
 
         String output = getOutput(outputFuture);
@@ -517,7 +518,7 @@ public final class GitPushService {
             flushGitOutputSegment(segment, progressRange);
             return output.toString();
         } catch (IOException exception) {
-            return "Failed to read git output: " + exception.getMessage();
+            return text("git.error.output-read-failed-inline", exception.getMessage());
         }
     }
 
@@ -540,17 +541,17 @@ public final class GitPushService {
             return outputFuture.get(5, TimeUnit.SECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new GitPushException("Interrupted while reading git output.", exception);
+            throw new GitPushException(text("git.error.output-interrupted"), exception);
         } catch (ExecutionException exception) {
-            throw new GitPushException("Failed to read git output.", exception);
+            throw new GitPushException(text("git.error.output-failed"), exception);
         } catch (TimeoutException exception) {
-            throw new GitPushException("Timed out while reading git output.", exception);
+            throw new GitPushException(text("git.error.output-timed-out"), exception);
         }
     }
 
     private GitPushException commandFailed(List<String> arguments, CommandResult result) {
-        String output = result.output().isBlank() ? "No git output." : sanitizeOutput(result.output());
-        return new GitPushException("Git command failed (" + describeGitCommand(arguments) + ", exit " + result.exitCode() + "): " + output);
+        String output = result.output().isBlank() ? text("git.error.no-output") : sanitizeOutput(result.output());
+        return new GitPushException(text("git.error.command-failed", describeGitCommand(arguments), result.exitCode(), output));
     }
 
     private String describeGitCommand(List<String> arguments) {
@@ -623,6 +624,10 @@ public final class GitPushService {
 
     private void reportProgress(double progress, String message) {
         progressListener.accept(new PushProgress(progress, message));
+    }
+
+    private String text(String key, Object... arguments) {
+        return messages.text(key, arguments);
     }
 
     private String redactRemoteUserInfo(String remoteUrl) {
