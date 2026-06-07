@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -37,6 +38,7 @@ public final class GitPushService {
     private final GitConfig config;
     private final Messages messages;
     private final Consumer<PushProgress> progressListener;
+    private final Logger logger;
 
     public GitPushService(IAAutoPlugin plugin) {
         this(plugin, progress -> {
@@ -49,6 +51,7 @@ public final class GitPushService {
         this.messages = Messages.from(plugin.getConfig());
         this.progressListener = progressListener == null ? progress -> {
         } : progressListener;
+        this.logger = plugin.getLogger();
     }
 
     public SourceFileSnapshot snapshotSourceFile() throws GitPushException {
@@ -112,7 +115,11 @@ public final class GitPushService {
         }
 
         reportProgress(0.14D, text("git.progress.preparing-github-cli"));
-        runGhOrThrow(workingDirectory, "auth", "status");
+        CommandResult authStatus = runGh(workingDirectory, List.of("auth", "status"));
+        logGithubCliAuthStatus(authStatus);
+        if (authStatus.exitCode() != 0) {
+            throw commandFailed(config.githubCliExecutable(), List.of("auth", "status"), authStatus);
+        }
         runGhOrThrow(workingDirectory, "auth", "setup-git");
     }
 
@@ -528,7 +535,10 @@ public final class GitPushService {
 
         if (!finished) {
             process.destroyForcibly();
-            throw new GitPushException(text("git.error.timed-out", config.timeoutSeconds(), describeCommand(executable, arguments)));
+            throw new GitPushException(
+                    text("git.error.timed-out", config.timeoutSeconds(), describeCommand(executable, arguments)),
+                    isRemoteGitCommand(arguments)
+            );
         }
 
         String output = getOutput(outputFuture);
@@ -622,7 +632,135 @@ public final class GitPushService {
 
     private GitPushException commandFailed(String executable, List<String> arguments, CommandResult result) {
         String output = result.output().isBlank() ? text("git.error.no-output") : sanitizeOutput(result.output());
-        return new GitPushException(text("git.error.command-failed", describeCommand(executable, arguments), result.exitCode(), output));
+        String diagnosis = diagnoseCommandFailure(executable, arguments, output);
+        String message = text("git.error.command-failed", describeCommand(executable, arguments), result.exitCode(), output);
+        if (!diagnosis.isBlank()) {
+            logDiagnosis(diagnosis);
+            message = message + System.lineSeparator() + diagnosis;
+        }
+        return new GitPushException(message, isRetryableCommandFailure(arguments, output));
+    }
+
+    private void logGithubCliAuthStatus(CommandResult result) {
+        String output = result.output().isBlank() ? text("git.error.no-output") : sanitizeOutput(result.output());
+        logger.info("[github-cli auth] gh auth status exit " + result.exitCode());
+        for (String line : output.split("\\R")) {
+            if (!line.isBlank()) {
+                logger.info("[github-cli auth] " + line);
+            }
+        }
+    }
+
+    private String diagnoseCommandFailure(String executable, List<String> arguments, String output) {
+        String lowerOutput = output.toLowerCase(Locale.ROOT);
+        if (Objects.equals(executable, config.githubCliExecutable()) && arguments.equals(List.of("auth", "status"))) {
+            return text("git.error.hint.github-cli-auth");
+        }
+        if (containsAuthenticationFailure(lowerOutput)) {
+            return text("git.error.hint.git-auth");
+        }
+        if (containsSshPermissionFailure(lowerOutput)) {
+            return text("git.error.hint.git-ssh-auth");
+        }
+        if (containsLocalProxyFailure(lowerOutput)) {
+            return text("git.error.hint.local-proxy");
+        }
+        if (containsNetworkFailure(lowerOutput)) {
+            return text("git.error.hint.network");
+        }
+        if (containsPermanentRemoteFailure(lowerOutput)) {
+            return text("git.error.hint.permanent-remote");
+        }
+        return "";
+    }
+
+    private void logDiagnosis(String diagnosis) {
+        logger.warning("[git diagnosis] " + diagnosis.replace('\r', ' ').replace('\n', ' '));
+    }
+
+    private boolean isRetryableCommandFailure(List<String> arguments, String output) {
+        String lowerOutput = output.toLowerCase(Locale.ROOT);
+        if (!isRemoteGitCommand(arguments)
+                || containsAuthenticationFailure(lowerOutput)
+                || containsSshPermissionFailure(lowerOutput)
+                || containsPermanentRemoteFailure(lowerOutput)) {
+            return false;
+        }
+        return containsNetworkFailure(lowerOutput)
+                || containsLocalProxyFailure(lowerOutput)
+                || lowerOutput.contains("early eof")
+                || lowerOutput.contains("connection reset")
+                || lowerOutput.contains("remote end hung up unexpectedly")
+                || lowerOutput.contains("rpc failed")
+                || lowerOutput.contains("http/2 stream");
+    }
+
+    private boolean isRemoteGitCommand(List<String> arguments) {
+        if (arguments.isEmpty()) {
+            return false;
+        }
+        return switch (arguments.get(0)) {
+            case "clone", "fetch", "ls-remote", "push", "pull" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean containsAuthenticationFailure(String lowerOutput) {
+        return lowerOutput.contains("authentication failed")
+                || lowerOutput.contains("could not read username")
+                || lowerOutput.contains("invalid username or password")
+                || lowerOutput.contains("bad credentials")
+                || lowerOutput.contains("token") && lowerOutput.contains("invalid")
+                || lowerOutput.contains("not logged in")
+                || lowerOutput.contains("failed to log in");
+    }
+
+    private boolean containsSshPermissionFailure(String lowerOutput) {
+        return lowerOutput.contains("permission denied (publickey)")
+                || lowerOutput.contains("could not read from remote repository");
+    }
+
+    private boolean containsLocalProxyFailure(String lowerOutput) {
+        boolean mentionsLocalProxy = lowerOutput.contains("via 127.0.0.1")
+                || lowerOutput.contains("via localhost")
+                || lowerOutput.contains("proxy 127.0.0.1")
+                || lowerOutput.contains("proxy localhost")
+                || isLocalProxy(config.httpProxy())
+                || isLocalProxy(config.httpsProxy());
+        return mentionsLocalProxy
+                && (lowerOutput.contains("could not connect")
+                || lowerOutput.contains("failed to connect")
+                || lowerOutput.contains("connection refused"));
+    }
+
+    private boolean isLocalProxy(String proxy) {
+        if (isBlank(proxy)) {
+            return false;
+        }
+        String normalized = proxy.toLowerCase(Locale.ROOT);
+        return normalized.contains("127.0.0.1") || normalized.contains("localhost");
+    }
+
+    private boolean containsNetworkFailure(String lowerOutput) {
+        return lowerOutput.contains("failed to connect")
+                || lowerOutput.contains("could not connect")
+                || lowerOutput.contains("could not resolve host")
+                || lowerOutput.contains("connection timed out")
+                || lowerOutput.contains("network is unreachable")
+                || lowerOutput.contains("tls")
+                || lowerOutput.contains("ssl")
+                || lowerOutput.contains("proxy");
+    }
+
+    private boolean containsPermanentRemoteFailure(String lowerOutput) {
+        return lowerOutput.contains("repository not found")
+                || lowerOutput.contains("does not appear to be a git repository")
+                || lowerOutput.contains("remote rejected")
+                || lowerOutput.contains("pre-receive hook declined")
+                || lowerOutput.contains("protected branch hook declined")
+                || lowerOutput.contains("large files detected")
+                || lowerOutput.contains("file size limit")
+                || lowerOutput.contains("gh001");
     }
 
     private String describeCommand(String executable, List<String> arguments) {

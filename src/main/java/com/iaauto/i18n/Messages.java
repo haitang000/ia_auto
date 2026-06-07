@@ -36,6 +36,7 @@ public final class Messages {
                 Map.entry("command.starting-push", "Starting /nap push..."),
                 Map.entry("command.starting-push-delayed", "Starting /nap push in %d seconds..."),
                 Map.entry("command.git-push-start", "Starting git push for ItemsAdder generated.zip..."),
+                Map.entry("command.push-retrying", "Push failed; retrying upload (%d/%d)..."),
                 Map.entry("command.reload-complete", "Configuration reloaded."),
                 Map.entry("command.push-no-result", "Push finished without a result."),
                 Map.entry("command.push-committed", "generated.zip was committed and pushed to origin/%s."),
@@ -107,6 +108,12 @@ public final class Messages {
                 Map.entry("git.error.output-failed", "Failed to read git output."),
                 Map.entry("git.error.output-timed-out", "Timed out while reading git output."),
                 Map.entry("git.error.no-output", "No git output."),
+                Map.entry("git.error.hint.github-cli-auth", "Detected a GitHub CLI login problem. Log in as the same OS user that runs the server: gh auth login -h github.com. If the account is already present, refresh it: gh auth refresh -h github.com"),
+                Map.entry("git.error.hint.git-auth", "Detected a git authentication problem. Check the repository URL and log in again with Git Credential Manager, SSH keys, or set git.submit-method to github-cli after running gh auth login."),
+                Map.entry("git.error.hint.git-ssh-auth", "Detected an SSH key permission problem. Make sure the server user has an SSH key loaded and that the public key has access to the GitHub repository."),
+                Map.entry("git.error.hint.local-proxy", "Detected an unreachable local proxy. Start the proxy on the server, set git.proxy.http/git.proxy.https to the correct address, or clear them with /nap git clear proxy.http and /nap git clear proxy.https."),
+                Map.entry("git.error.hint.network", "Detected a network connection problem. Check DNS, firewall, GitHub reachability, and any configured proxy."),
+                Map.entry("git.error.hint.permanent-remote", "Detected a remote repository rejection. Check repository permissions, branch protection, and GitHub file size limits before retrying."),
                 Map.entry("git.error.command-failed", "Git command failed (%s, exit %d): %s")
         )),
         CHINESE(Map.ofEntries(
@@ -118,6 +125,7 @@ public final class Messages {
                 Map.entry("command.starting-push", "正在启动 /nap push..."),
                 Map.entry("command.starting-push-delayed", "%d 秒后启动 /nap push..."),
                 Map.entry("command.git-push-start", "正在为 ItemsAdder generated.zip 执行 git 推送..."),
+                Map.entry("command.push-retrying", "推送失败；正在重试上传（%d/%d）..."),
                 Map.entry("command.reload-complete", "配置已重新加载。"),
                 Map.entry("command.push-no-result", "推送已结束，但没有返回结果。"),
                 Map.entry("command.push-committed", "generated.zip 已提交并推送到 origin/%s。"),
@@ -188,6 +196,12 @@ public final class Messages {
                 Map.entry("git.error.output-failed", "读取 git 输出失败。"),
                 Map.entry("git.error.output-timed-out", "读取 git 输出超时。"),
                 Map.entry("git.error.no-output", "没有 git 输出。"),
+                Map.entry("git.error.hint.github-cli-auth", "检测到 GitHub CLI 登录问题。请用运行服务器的同一个系统用户执行：gh auth login -h github.com。如果账号已存在，执行：gh auth refresh -h github.com"),
+                Map.entry("git.error.hint.git-auth", "检测到 git 认证问题。请检查仓库地址，并通过 Git Credential Manager、SSH key 重新登录；或运行 gh auth login 后将 git.submit-method 设置为 github-cli。"),
+                Map.entry("git.error.hint.git-ssh-auth", "检测到 SSH key 权限问题。请确认运行服务器的系统用户已加载 SSH key，并且公钥有该 GitHub 仓库权限。"),
+                Map.entry("git.error.hint.local-proxy", "检测到本机代理无法连接。请启动服务器上的代理，修正 git.proxy.http/git.proxy.https，或使用 /nap git clear proxy.http 和 /nap git clear proxy.https 清空代理配置。"),
+                Map.entry("git.error.hint.network", "检测到网络连接问题。请检查 DNS、防火墙、GitHub 连通性以及代理配置。"),
+                Map.entry("git.error.hint.permanent-remote", "检测到远端仓库拒绝。请检查仓库权限、分支保护和 GitHub 文件大小限制后再重试。"),
                 Map.entry("git.error.command-failed", "Git 命令失败（%s，退出码 %d）：%s")
         ));
 
