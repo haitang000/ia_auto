@@ -47,6 +47,8 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             new GitSetting("author.email", "git.author.email")
     );
     private static final long TICKS_PER_SECOND = 20L;
+    private static final int MAX_PUSH_RETRIES = 3;
+    private static final long PUSH_RETRY_DELAY_MILLIS = 2000L;
 
     private final IAAutoPlugin plugin;
     private final AtomicBoolean operationRunning = new AtomicBoolean(false);
@@ -213,17 +215,31 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             PushResult result = null;
             Exception failure = null;
 
-            try {
-                result = new GitPushService(plugin, progressDisplay::update).pushGeneratedZip(sourceBeforePack);
-            } catch (GitPushException exception) {
-                failure = exception;
-            } catch (Exception exception) {
-                failure = exception;
-                plugin.getLogger().log(Level.SEVERE, messages.text("log.unexpected-push-error"), exception);
-            } finally {
-                operationRunning.set(false);
+            int totalAttempts = MAX_PUSH_RETRIES + 1;
+            for (int attempt = 1; attempt <= totalAttempts; attempt++) {
+                try {
+                    result = new GitPushService(plugin, progressDisplay::update).pushGeneratedZip(sourceBeforePack);
+                    failure = null;
+                    break;
+                } catch (GitPushException exception) {
+                    failure = exception;
+                } catch (Exception exception) {
+                    failure = exception;
+                    plugin.getLogger().log(Level.SEVERE, messages.text("log.unexpected-push-error"), exception);
+                }
+
+                if (attempt >= totalAttempts || !shouldRetryPushFailure(failure)) {
+                    break;
+                }
+
+                announcePushRetry(sender, messages, attempt, failure);
+                if (!sleepBeforeRetry()) {
+                    failure = new GitPushException(messages.text("git.error.wait-interrupted"));
+                    break;
+                }
             }
 
+            operationRunning.set(false);
             PushResult finalResult = result;
             Exception finalFailure = failure;
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -231,6 +247,31 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
                 reportPushResult(sender, finalResult, finalFailure);
             });
         });
+    }
+
+    private boolean shouldRetryPushFailure(Exception failure) {
+        if (failure instanceof GitPushException gitFailure) {
+            return gitFailure.retryable();
+        }
+        return false;
+    }
+
+    private void announcePushRetry(CommandSender sender, Messages messages, int retryNumber, Exception failure) {
+        String message = messages.text("command.push-retrying", retryNumber, MAX_PUSH_RETRIES);
+        plugin.getLogger().warning("[push retry " + retryNumber + "/" + MAX_PUSH_RETRIES + "] "
+                + compactFailure(failure));
+        Bukkit.getScheduler().runTask(plugin, () ->
+                sender.sendMessage(PREFIX + ChatColor.YELLOW + message));
+    }
+
+    private boolean sleepBeforeRetry() {
+        try {
+            Thread.sleep(PUSH_RETRY_DELAY_MILLIS);
+            return true;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private void reload(CommandSender sender) {
