@@ -26,6 +26,13 @@ git:
     name: ""
     email: ""
 
+  # Optional git proxy settings. Leave blank to use the server environment.
+  # Supports URLs such as http://127.0.0.1:7890 or socks5://127.0.0.1:1080.
+  proxy:
+    http: ""
+    https: ""
+    no-proxy: ""
+
 start:
   # Command run by /nap start before pushing. Do not include the leading slash.
   pack-command: "iazip"

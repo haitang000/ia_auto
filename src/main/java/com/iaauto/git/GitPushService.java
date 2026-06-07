@@ -469,12 +469,14 @@ public final class GitPushService {
     private CommandResult runGit(Path workingDirectory, List<String> arguments, ProgressRange progressRange) throws GitPushException {
         List<String> command = new ArrayList<>(arguments.size() + 1);
         command.add(config.executable());
+        addGitProxyConfig(command);
         command.addAll(arguments);
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workingDirectory.toFile());
         builder.redirectErrorStream(true);
         builder.environment().put("GIT_TERMINAL_PROMPT", "0");
+        applyProxyEnvironment(builder);
 
         Process process;
         try {
@@ -500,6 +502,40 @@ public final class GitPushService {
 
         String output = getOutput(outputFuture);
         return new CommandResult(process.exitValue(), output == null ? "" : output.trim());
+    }
+
+    private void addGitProxyConfig(List<String> command) {
+        String proxy = firstConfigured(config.httpsProxy(), config.httpProxy());
+        addGitConfig(command, "http.proxy", proxy);
+        addGitConfig(command, "http.noProxy", config.noProxy());
+    }
+
+    private void addGitConfig(List<String> command, String name, String value) {
+        if (isBlank(value)) {
+            return;
+        }
+
+        command.add("-c");
+        command.add(name + "=" + value);
+    }
+
+    private void applyProxyEnvironment(ProcessBuilder builder) {
+        if (!isBlank(config.httpProxy())) {
+            builder.environment().put("HTTP_PROXY", config.httpProxy());
+            builder.environment().put("http_proxy", config.httpProxy());
+        }
+        if (!isBlank(config.httpsProxy())) {
+            builder.environment().put("HTTPS_PROXY", config.httpsProxy());
+            builder.environment().put("https_proxy", config.httpsProxy());
+        }
+        if (!isBlank(config.noProxy())) {
+            builder.environment().put("NO_PROXY", config.noProxy());
+            builder.environment().put("no_proxy", config.noProxy());
+        }
+    }
+
+    private String firstConfigured(String first, String second) {
+        return isBlank(first) ? second : first;
     }
 
     private String readProcessOutput(InputStream inputStream, ProgressRange progressRange) {
@@ -564,6 +600,9 @@ public final class GitPushService {
         if (Objects.equals(argument, config.remoteUrl())) {
             return "<remote-url>";
         }
+        if (argument.startsWith("http.proxy=")) {
+            return "http.proxy=<proxy>";
+        }
         return argument;
     }
 
@@ -574,7 +613,19 @@ public final class GitPushService {
             String redacted = redactRemoteUserInfo(config.remoteUrl());
             sanitized = sanitized.replace(redacted, "<remote-url>");
         }
+        sanitized = redactConfiguredProxy(sanitized, config.httpProxy());
+        sanitized = redactConfiguredProxy(sanitized, config.httpsProxy());
         return sanitized;
+    }
+
+    private String redactConfiguredProxy(String output, String proxy) {
+        if (isBlank(proxy)) {
+            return output;
+        }
+
+        String sanitized = output.replace(proxy, "<proxy>");
+        String redacted = redactRemoteUserInfo(proxy);
+        return sanitized.replace(redacted, "<proxy>");
     }
 
     private void reportGitProgress(ProgressRange progressRange, String output) {
@@ -723,6 +774,9 @@ public final class GitPushService {
             String repositoryFile,
             String commitMessage,
             long timeoutSeconds,
+            String httpProxy,
+            String httpsProxy,
+            String noProxy,
             String authorName,
             String authorEmail,
             long sourceRefreshTimeoutSeconds,
@@ -739,6 +793,9 @@ public final class GitPushService {
                     getString(configuration, "git.repository-file", "generated.zip"),
                     getString(configuration, "git.commit-message", "Update ItemsAdder generated.zip"),
                     Math.max(5L, configuration.getLong("git.timeout-seconds", 120L)),
+                    getString(configuration, "git.proxy.http", ""),
+                    getString(configuration, "git.proxy.https", ""),
+                    getString(configuration, "git.proxy.no-proxy", ""),
                     getString(configuration, "git.author.name", ""),
                     getString(configuration, "git.author.email", ""),
                     Math.max(1L, configuration.getLong("start.source-refresh-timeout-seconds", 120L)),
