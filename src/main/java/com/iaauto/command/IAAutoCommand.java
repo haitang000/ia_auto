@@ -30,7 +30,9 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS = List.of("help", "start", "push", "git", "reload");
     private static final List<String> GIT_ACTIONS = List.of("get", "set", "clear");
     private static final List<GitSetting> GIT_SETTINGS = List.of(
+            new GitSetting("submit-method", "git.submit-method"),
             new GitSetting("executable", "git.executable"),
+            new GitSetting("github-cli-executable", "git.github-cli-executable"),
             new GitSetting("remote-url", "git.remote-url"),
             new GitSetting("branch", "git.branch"),
             new GitSetting("source-file", "git.source-file"),
@@ -376,6 +378,13 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(PREFIX + ChatColor.RED + "timeout-seconds must be a number.");
                 return;
             }
+        } else if ("submit-method".equals(setting.name())) {
+            String normalized = value.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+            if (!"git".equals(normalized) && !"github-cli".equals(normalized) && !"gh".equals(normalized)) {
+                sender.sendMessage(PREFIX + ChatColor.RED + "submit-method must be git or github-cli.");
+                return;
+            }
+            plugin.getConfig().set(setting.path(), "gh".equals(normalized) ? "github-cli" : normalized);
         } else {
             plugin.getConfig().set(setting.path(), value.trim());
         }

@@ -29,13 +29,23 @@ The plugin jar will be under `build/libs/` for Gradle or `target/` for Maven.
 4. Make sure the server process can run local `git` and already has GitHub authentication configured, such as SSH keys or Git Credential Manager.
 5. Run `/nap start`.
 
+If you prefer GitHub CLI authentication, install `gh`, log in as the same server user, and set:
+
+```text
+/nap git set submit-method github-cli
+```
+
+NekoAutoPack will still use the local git repository for add/commit/push, but it will run `gh auth setup-git` before pushing so GitHub CLI can provide the credentials.
+
 Use `/nap help` or `/nap` in game or from the console to list the commands available to the sender.
 
 You can also configure git settings from the console or in game:
 
 ```text
 /nap git set remote-url https://github.com/owner/repository.git
+/nap git set submit-method github-cli
 /nap git set branch main
+/nap git set github-cli-executable gh
 /nap git set proxy.https http://127.0.0.1:7890
 /nap git clear proxy.https
 /nap git set author.name NekoAutoPack
@@ -44,7 +54,7 @@ You can also configure git settings from the console or in game:
 /nap git clear author.email
 ```
 
-Supported git settings are `executable`, `remote-url`, `branch`, `source-file`, `repository-directory`, `repository-file`, `commit-message`, `timeout-seconds`, `proxy.http`, `proxy.https`, `proxy.no-proxy`, `author.name`, and `author.email`.
+Supported git settings are `submit-method`, `executable`, `github-cli-executable`, `remote-url`, `branch`, `source-file`, `repository-directory`, `repository-file`, `commit-message`, `timeout-seconds`, `proxy.http`, `proxy.https`, `proxy.no-proxy`, `author.name`, and `author.email`.
 
 Language defaults to English. Use `en` or `zh_cn`:
 

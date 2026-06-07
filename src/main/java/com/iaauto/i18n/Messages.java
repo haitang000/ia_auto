@@ -65,6 +65,7 @@ public final class Messages {
                 Map.entry("git.progress.checking-changes", "Checking repository changes"),
                 Map.entry("git.progress.committing-source", "Committing generated.zip"),
                 Map.entry("git.progress.no-changes", "No file changes found; verifying remote branch"),
+                Map.entry("git.progress.preparing-github-cli", "Preparing GitHub CLI authentication"),
                 Map.entry("git.progress.pushing", "Pushing to origin/%s"),
                 Map.entry("git.progress.finished", "Push finished"),
                 Map.entry("git.progress.cloning", "Cloning repository"),
