@@ -3,7 +3,8 @@ language: "en" # Supported: en, zh_cn
 git:
   # How commits are submitted. Supported: "git" or "github-cli".
   # "git" uses your existing git authentication.
-  # "github-cli" runs `gh auth setup-git` before pushing, so the server process must already be logged in with GitHub CLI.
+  # "github-cli" starts `gh auth login --web` automatically when needed, sends the verification output
+  # to the command sender and console, then runs `gh auth setup-git` before pushing.
   submit-method: "git"
 
   # Local git executable. Keep "git" when git is already on the server PATH.

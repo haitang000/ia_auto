@@ -118,9 +118,24 @@ public final class GitPushService {
         CommandResult authStatus = runGh(workingDirectory, List.of("auth", "status"));
         logGithubCliAuthStatus(authStatus);
         if (authStatus.exitCode() != 0) {
-            throw commandFailed(config.githubCliExecutable(), List.of("auth", "status"), authStatus);
+            loginWithGithubCli(workingDirectory);
+            authStatus = runGh(workingDirectory, List.of("auth", "status"));
+            logGithubCliAuthStatus(authStatus);
+            if (authStatus.exitCode() != 0) {
+                throw commandFailed(config.githubCliExecutable(), List.of("auth", "status"), authStatus);
+            }
         }
         runGhOrThrow(workingDirectory, "auth", "setup-git");
+    }
+
+    private void loginWithGithubCli(Path workingDirectory) throws GitPushException {
+        reportProgress(0.145D, text("git.progress.github-cli-login"));
+        List<String> arguments = List.of("auth", "login", "--hostname", "github.com", "--web", "--git-protocol", "https");
+        CommandResult login = runGh(workingDirectory, arguments,
+                new ProgressRange(0.145D, 0.155D, text("git.progress.github-cli-login-output"), true));
+        if (login.exitCode() != 0) {
+            throw commandFailed(config.githubCliExecutable(), arguments, login);
+        }
     }
 
     private void ensureRepository(Path repositoryDirectory) throws GitPushException {
@@ -502,6 +517,10 @@ public final class GitPushService {
         return runCommand(workingDirectory, config.githubCliExecutable(), arguments, null);
     }
 
+    private CommandResult runGh(Path workingDirectory, List<String> arguments, ProgressRange progressRange) throws GitPushException {
+        return runCommand(workingDirectory, config.githubCliExecutable(), arguments, progressRange);
+    }
+
     private CommandResult runCommand(Path workingDirectory, String executable, List<String> arguments, ProgressRange progressRange) throws GitPushException {
         List<String> command = new ArrayList<>(arguments.size() + 1);
         command.add(executable);
@@ -610,7 +629,7 @@ public final class GitPushService {
             return;
         }
 
-        reportGitProgress(progressRange, output);
+        reportCommandProgress(progressRange, output);
     }
 
     private String getOutput(CompletableFuture<String> outputFuture) throws GitPushException {
@@ -653,7 +672,7 @@ public final class GitPushService {
 
     private String diagnoseCommandFailure(String executable, List<String> arguments, String output) {
         String lowerOutput = output.toLowerCase(Locale.ROOT);
-        if (Objects.equals(executable, config.githubCliExecutable()) && arguments.equals(List.of("auth", "status"))) {
+        if (Objects.equals(executable, config.githubCliExecutable()) && isGithubCliAuthCommand(arguments)) {
             return text("git.error.hint.github-cli-auth");
         }
         if (containsAuthenticationFailure(lowerOutput)) {
@@ -676,6 +695,14 @@ public final class GitPushService {
 
     private void logDiagnosis(String diagnosis) {
         logger.warning("[git diagnosis] " + diagnosis.replace('\r', ' ').replace('\n', ' '));
+    }
+
+    private boolean isGithubCliAuthCommand(List<String> arguments) {
+        return arguments.size() >= 2
+                && Objects.equals(arguments.get(0), "auth")
+                && (Objects.equals(arguments.get(1), "status")
+                || Objects.equals(arguments.get(1), "login")
+                || Objects.equals(arguments.get(1), "setup-git"));
     }
 
     private boolean isRetryableCommandFailure(List<String> arguments, String output) {
@@ -801,15 +828,19 @@ public final class GitPushService {
         return sanitized.replace(redacted, "<proxy>");
     }
 
-    private void reportGitProgress(ProgressRange progressRange, String output) {
+    private void reportCommandProgress(ProgressRange progressRange, String output) {
+        if (progressRange.notifySender()) {
+            logger.info("[github-cli auth] " + output);
+        }
+
         int percent = findFirstPercent(output);
         if (percent >= 0) {
             double progress = scaleGitProgress(progressRange, output, percent);
-            reportProgress(progress, progressRange.label() + ": " + output);
+            reportProgress(progress, progressRange.label() + ": " + output, progressRange.notifySender());
             return;
         }
 
-        reportProgress(progressRange.start(), progressRange.label() + ": " + output);
+        reportProgress(progressRange.start(), progressRange.label() + ": " + output, progressRange.notifySender());
     }
 
     private double scaleGitProgress(ProgressRange progressRange, String output, int percent) {
@@ -847,7 +878,11 @@ public final class GitPushService {
     }
 
     private void reportProgress(double progress, String message) {
-        progressListener.accept(new PushProgress(progress, message));
+        reportProgress(progress, message, false);
+    }
+
+    private void reportProgress(double progress, String message, boolean notifySender) {
+        progressListener.accept(new PushProgress(progress, message, notifySender));
     }
 
     private String text(String key, Object... arguments) {
@@ -900,7 +935,10 @@ public final class GitPushService {
     private record CommandResult(int exitCode, String output) {
     }
 
-    private record ProgressRange(double start, double end, String label) {
+    private record ProgressRange(double start, double end, String label, boolean notifySender) {
+        private ProgressRange(double start, double end, String label) {
+            this(start, end, label, false);
+        }
     }
 
     private enum GitProgressStage {
