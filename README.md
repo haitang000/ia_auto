@@ -29,13 +29,13 @@ The plugin jar will be under `build/libs/` for Gradle or `target/` for Maven.
 4. Make sure the server process can run local `git` and already has GitHub authentication configured, such as SSH keys or Git Credential Manager.
 5. Run `/nap start`.
 
-If you prefer GitHub CLI authentication, install `gh`, log in as the same server user, and set:
+If you prefer GitHub CLI authentication, install `gh` for the same server user and set:
 
 ```text
 /nap git set submit-method github-cli
 ```
 
-NekoAutoPack will still use the local git repository for add/commit/push, but it will run `gh auth setup-git` before pushing so GitHub CLI can provide the credentials.
+NekoAutoPack will still use the local git repository for add/commit/push. If GitHub CLI is not logged in, the first `/nap push` or `/nap start` will automatically run `gh auth login --web --git-protocol https` and send the browser verification URL/code to the command sender and server console. After login succeeds, it runs `gh auth setup-git` before pushing so GitHub CLI can provide the credentials.
 
 Use `/nap help` or `/nap` in game or from the console to list the commands available to the sender.
 

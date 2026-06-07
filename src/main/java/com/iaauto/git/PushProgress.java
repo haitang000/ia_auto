@@ -2,7 +2,11 @@ package com.iaauto.git;
 
 import java.util.Objects;
 
-public record PushProgress(double progress, String message) {
+public record PushProgress(double progress, String message, boolean notifySender) {
+    public PushProgress(double progress, String message) {
+        this(progress, message, false);
+    }
+
     public PushProgress {
         if (Double.isNaN(progress) || Double.isInfinite(progress)) {
             progress = 0.0D;

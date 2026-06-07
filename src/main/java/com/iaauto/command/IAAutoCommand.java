@@ -511,6 +511,15 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         private void update(PushProgress progress) {
             ProgressSnapshot snapshot = recordProgress(progress);
 
+            if (progress.notifySender()) {
+                String senderMessage = Objects.toString(progress.message(), messages.text("progress.default")).trim();
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (!finished && !senderMessage.isBlank()) {
+                        sender.sendMessage(PREFIX + ChatColor.YELLOW + senderMessage);
+                    }
+                });
+            }
+
             if (bossBar == null) {
                 return;
             }
