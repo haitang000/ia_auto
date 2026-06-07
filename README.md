@@ -31,6 +31,21 @@ The plugin jar will be under `build/libs/` for Gradle or `target/` for Maven.
 
 Use `/nap help` or `/nap` in game or from the console to list the commands available to the sender.
 
+You can also configure git settings from the console or in game:
+
+```text
+/nap git set remote-url https://github.com/owner/repository.git
+/nap git set branch main
+/nap git set proxy.https http://127.0.0.1:7890
+/nap git clear proxy.https
+/nap git set author.name NekoAutoPack
+/nap git set author.email bot@example.com
+/nap git get remote-url
+/nap git clear author.email
+```
+
+Supported git settings are `executable`, `remote-url`, `branch`, `source-file`, `repository-directory`, `repository-file`, `commit-message`, `timeout-seconds`, `proxy.http`, `proxy.https`, `proxy.no-proxy`, `author.name`, and `author.email`.
+
 Language defaults to English. Use `en` or `zh_cn`:
 
 ```yaml
@@ -70,6 +85,7 @@ Permissions:
 - `nap.help` for `/nap help`
 - `nap.start` for `/nap start`
 - `nap.push` for `/nap push`
+- `nap.git` for `/nap git`
 - `nap.reload` for `/nap reload`
 
 ---

@@ -27,7 +27,23 @@ import java.util.logging.Level;
 
 public final class IAAutoCommand implements CommandExecutor, TabCompleter {
     private static final String PREFIX = ChatColor.AQUA + "[NekoAutoPack] " + ChatColor.RESET;
-    private static final List<String> SUBCOMMANDS = List.of("help", "start", "push", "reload");
+    private static final List<String> SUBCOMMANDS = List.of("help", "start", "push", "git", "reload");
+    private static final List<String> GIT_ACTIONS = List.of("get", "set", "clear");
+    private static final List<GitSetting> GIT_SETTINGS = List.of(
+            new GitSetting("executable", "git.executable"),
+            new GitSetting("remote-url", "git.remote-url"),
+            new GitSetting("branch", "git.branch"),
+            new GitSetting("source-file", "git.source-file"),
+            new GitSetting("repository-directory", "git.repository-directory"),
+            new GitSetting("repository-file", "git.repository-file"),
+            new GitSetting("commit-message", "git.commit-message"),
+            new GitSetting("timeout-seconds", "git.timeout-seconds"),
+            new GitSetting("proxy.http", "git.proxy.http"),
+            new GitSetting("proxy.https", "git.proxy.https"),
+            new GitSetting("proxy.no-proxy", "git.proxy.no-proxy"),
+            new GitSetting("author.name", "git.author.name"),
+            new GitSetting("author.email", "git.author.email")
+    );
     private static final long TICKS_PER_SECOND = 20L;
 
     private final IAAutoPlugin plugin;
@@ -44,11 +60,6 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (args.length != 1) {
-            sendHelp(sender, label);
-            return true;
-        }
-
         String subcommand = args[0].toLowerCase(Locale.ROOT);
         if ("help".equals(subcommand)) {
             sendHelp(sender, label);
@@ -56,16 +67,33 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         }
 
         if ("start".equals(subcommand)) {
+            if (args.length != 1) {
+                sendHelp(sender, label);
+                return true;
+            }
             start(sender);
             return true;
         }
 
         if ("push".equals(subcommand)) {
+            if (args.length != 1) {
+                sendHelp(sender, label);
+                return true;
+            }
             push(sender);
             return true;
         }
 
+        if ("git".equals(subcommand)) {
+            git(sender, label, args);
+            return true;
+        }
+
         if ("reload".equals(subcommand)) {
+            if (args.length != 1) {
+                sendHelp(sender, label);
+                return true;
+            }
             reload(sender);
             return true;
         }
@@ -76,15 +104,33 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length != 1) {
-            return Collections.emptyList();
+        if (args.length == 1) {
+            String prefix = args[0].toLowerCase(Locale.ROOT);
+            return SUBCOMMANDS.stream()
+                    .filter(subcommand -> subcommand.startsWith(prefix))
+                    .filter(subcommand -> sender.hasPermission("nap." + subcommand))
+                    .toList();
         }
 
-        String prefix = args[0].toLowerCase(Locale.ROOT);
-        return SUBCOMMANDS.stream()
-                .filter(subcommand -> subcommand.startsWith(prefix))
-                .filter(subcommand -> sender.hasPermission("nap." + subcommand))
-                .toList();
+        if (args.length == 2 && "git".equalsIgnoreCase(args[0]) && sender.hasPermission("nap.git")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return GIT_ACTIONS.stream()
+                    .filter(action -> action.startsWith(prefix))
+                    .toList();
+        }
+
+        if (args.length == 3 && "git".equalsIgnoreCase(args[0]) && sender.hasPermission("nap.git")) {
+            String action = args[1].toLowerCase(Locale.ROOT);
+            if ("get".equals(action) || "set".equals(action) || "clear".equals(action)) {
+                String prefix = args[2].toLowerCase(Locale.ROOT);
+                return GIT_SETTINGS.stream()
+                        .map(GitSetting::name)
+                        .filter(name -> name.startsWith(prefix))
+                        .toList();
+            }
+        }
+
+        return Collections.emptyList();
     }
 
     private void push(CommandSender sender) {
@@ -195,6 +241,55 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(PREFIX + ChatColor.GREEN + messages().text("command.reload-complete"));
     }
 
+    private void git(CommandSender sender, String label, String[] args) {
+        if (!sender.hasPermission("nap.git")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + messages().text("command.permission-denied"));
+            return;
+        }
+
+        if (args.length < 3) {
+            sendGitHelp(sender, label);
+            return;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        GitSetting setting = findGitSetting(args[2]);
+        if (setting == null) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Unknown git setting: " + args[2]);
+            sendGitSettings(sender);
+            return;
+        }
+
+        if ("get".equals(action)) {
+            if (args.length != 3) {
+                sendGitHelp(sender, label);
+                return;
+            }
+            showGitSetting(sender, setting);
+            return;
+        }
+
+        if ("set".equals(action)) {
+            if (args.length < 4) {
+                sendGitHelp(sender, label);
+                return;
+            }
+            setGitSetting(sender, setting, joinArguments(args, 3));
+            return;
+        }
+
+        if ("clear".equals(action)) {
+            if (args.length != 3) {
+                sendGitHelp(sender, label);
+                return;
+            }
+            clearGitSetting(sender, setting);
+            return;
+        }
+
+        sendGitHelp(sender, label);
+    }
+
     private String configuredPackCommand() {
         String command = plugin.getConfig().getString("start.pack-command");
         if (command == null) {
@@ -246,9 +341,77 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("nap.push")) {
             sender.sendMessage(ChatColor.YELLOW + "/" + label + " push" + ChatColor.GRAY + " - " + messages.text("help.push"));
         }
+        if (sender.hasPermission("nap.git")) {
+            sender.sendMessage(ChatColor.YELLOW + "/" + label + " git" + ChatColor.GRAY + " - Configure git settings.");
+        }
         if (sender.hasPermission("nap.reload")) {
             sender.sendMessage(ChatColor.YELLOW + "/" + label + " reload" + ChatColor.GRAY + " - " + messages.text("help.reload"));
         }
+    }
+
+    private void sendGitHelp(CommandSender sender, String label) {
+        sender.sendMessage(PREFIX + ChatColor.GOLD + "Git configuration commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/" + label + " git get <setting>" + ChatColor.GRAY + " - Show a git setting.");
+        sender.sendMessage(ChatColor.YELLOW + "/" + label + " git set <setting> <value>" + ChatColor.GRAY + " - Save a git setting.");
+        sender.sendMessage(ChatColor.YELLOW + "/" + label + " git clear <setting>" + ChatColor.GRAY + " - Clear a git setting.");
+        sendGitSettings(sender);
+    }
+
+    private void sendGitSettings(CommandSender sender) {
+        sender.sendMessage(ChatColor.GRAY + "Settings: " + String.join(", ", GIT_SETTINGS.stream()
+                .map(GitSetting::name)
+                .toList()));
+    }
+
+    private void showGitSetting(CommandSender sender, GitSetting setting) {
+        Object value = plugin.getConfig().get(setting.path());
+        sender.sendMessage(PREFIX + ChatColor.YELLOW + setting.name() + ChatColor.GRAY + " = " + ChatColor.WHITE + Objects.toString(value, ""));
+    }
+
+    private void setGitSetting(CommandSender sender, GitSetting setting, String value) {
+        if ("timeout-seconds".equals(setting.name())) {
+            try {
+                plugin.getConfig().set(setting.path(), Math.max(5L, Long.parseLong(value.trim())));
+            } catch (NumberFormatException exception) {
+                sender.sendMessage(PREFIX + ChatColor.RED + "timeout-seconds must be a number.");
+                return;
+            }
+        } else {
+            plugin.getConfig().set(setting.path(), value.trim());
+        }
+
+        plugin.saveConfig();
+        sender.sendMessage(PREFIX + ChatColor.GREEN + "Saved " + setting.name() + ".");
+    }
+
+    private void clearGitSetting(CommandSender sender, GitSetting setting) {
+        if ("timeout-seconds".equals(setting.name())) {
+            plugin.getConfig().set(setting.path(), null);
+        } else {
+            plugin.getConfig().set(setting.path(), "");
+        }
+
+        plugin.saveConfig();
+        sender.sendMessage(PREFIX + ChatColor.GREEN + "Cleared " + setting.name() + ".");
+    }
+
+    private GitSetting findGitSetting(String name) {
+        String normalized = name.toLowerCase(Locale.ROOT);
+        return GIT_SETTINGS.stream()
+                .filter(setting -> setting.name().equals(normalized))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String joinArguments(String[] args, int startIndex) {
+        StringBuilder value = new StringBuilder();
+        for (int index = startIndex; index < args.length; index++) {
+            if (!value.isEmpty()) {
+                value.append(' ');
+            }
+            value.append(args[index]);
+        }
+        return value.toString();
     }
 
     private Messages messages() {
@@ -366,5 +529,8 @@ public final class IAAutoCommand implements CommandExecutor, TabCompleter {
 
         private record ProgressSnapshot(double progress, int percent, String message) {
         }
+    }
+
+    private record GitSetting(String name, String path) {
     }
 }

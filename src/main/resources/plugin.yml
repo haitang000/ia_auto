@@ -8,7 +8,7 @@ author: NekoAutoPack
 commands:
   nap:
     description: Runs NekoAutoPack commands.
-    usage: /nap <help|start|push|reload>
+    usage: /nap <help|start|push|git|reload>
 
 permissions:
   nap.help:
@@ -19,6 +19,9 @@ permissions:
     default: op
   nap.push:
     description: Allows /nap push.
+    default: op
+  nap.git:
+    description: Allows /nap git configuration commands.
     default: op
   nap.reload:
     description: Allows /nap reload.
