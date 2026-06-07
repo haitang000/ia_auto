@@ -4,14 +4,9 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
   pull_request:
     branches:
       - main
-
-permissions:
-  contents: write
 
 jobs:
   build:
@@ -29,28 +24,5 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Package with Maven
-        run: mvn --batch-mode package
-
-      - name: Prepare plugin jar
-        run: |
-          mkdir -p dist
-          cp target/nekoautopack-*.jar dist/NekoAutoPack.jar
-
-      - name: Upload Actions artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NekoAutoPack-${{ github.run_id }}-${{ github.run_attempt }}
-          path: dist/NekoAutoPack.jar
-          if-no-files-found: error
-
-      - name: Publish plugin jar
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/NekoAutoPack.jar --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/NekoAutoPack.jar --title "$GITHUB_REF_NAME" --generate-notes
-          fi
+      - name: Build with Maven
+        run: mvn --batch-mode verify
