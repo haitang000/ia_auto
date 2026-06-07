@@ -69,7 +69,9 @@ public final class GitPushService {
         Path sourceFile = resolveServerPath(config.sourceFile());
         SourceFileSnapshot sourceSnapshot = waitForReadySourceFile(sourceFile, previousSourceSnapshot);
 
-        reportProgress(0.14D, text("git.progress.preparing-repository"));
+        prepareSubmitMethod(serverRoot);
+
+        reportProgress(0.16D, text("git.progress.preparing-repository"));
         Path repositoryDirectory = resolveServerPath(config.repositoryDirectory());
         ensureRepository(repositoryDirectory);
 
@@ -102,6 +104,16 @@ public final class GitPushService {
         runGitOrThrow(repositoryDirectory, new ProgressRange(0.76D, 0.98D, text("git.progress.git-push")), "push", "--progress", "-u", "origin", config.branch());
         reportProgress(1.0D, text("git.progress.finished"));
         return new PushResult(committed, config.branch(), repositoryDirectory.toString(), gitFilePath);
+    }
+
+    private void prepareSubmitMethod(Path workingDirectory) throws GitPushException {
+        if (config.submitMethod() != SubmitMethod.GITHUB_CLI) {
+            return;
+        }
+
+        reportProgress(0.14D, text("git.progress.preparing-github-cli"));
+        runGhOrThrow(workingDirectory, "auth", "status");
+        runGhOrThrow(workingDirectory, "auth", "setup-git");
     }
 
     private void ensureRepository(Path repositoryDirectory) throws GitPushException {
@@ -467,9 +479,28 @@ public final class GitPushService {
     }
 
     private CommandResult runGit(Path workingDirectory, List<String> arguments, ProgressRange progressRange) throws GitPushException {
+        return runCommand(workingDirectory, config.executable(), arguments, progressRange);
+    }
+
+    private CommandResult runGhOrThrow(Path workingDirectory, String... arguments) throws GitPushException {
+        List<String> argumentList = List.of(arguments);
+        CommandResult result = runGh(workingDirectory, argumentList);
+        if (result.exitCode() == 0) {
+            return result;
+        }
+        throw commandFailed(config.githubCliExecutable(), argumentList, result);
+    }
+
+    private CommandResult runGh(Path workingDirectory, List<String> arguments) throws GitPushException {
+        return runCommand(workingDirectory, config.githubCliExecutable(), arguments, null);
+    }
+
+    private CommandResult runCommand(Path workingDirectory, String executable, List<String> arguments, ProgressRange progressRange) throws GitPushException {
         List<String> command = new ArrayList<>(arguments.size() + 1);
-        command.add(config.executable());
-        addGitProxyConfig(command);
+        command.add(executable);
+        if (Objects.equals(executable, config.executable())) {
+            addGitProxyConfig(command);
+        }
         command.addAll(arguments);
 
         ProcessBuilder builder = new ProcessBuilder(command);
@@ -482,7 +513,7 @@ public final class GitPushService {
         try {
             process = builder.start();
         } catch (IOException exception) {
-            throw new GitPushException(text("git.error.start-failed", config.executable()), exception);
+            throw new GitPushException(text("git.error.start-failed", executable), exception);
         }
 
         CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process.getInputStream(), progressRange));
@@ -492,12 +523,12 @@ public final class GitPushService {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
-            throw new GitPushException(text("git.error.interrupted", describeGitCommand(arguments)), exception);
+            throw new GitPushException(text("git.error.interrupted", describeCommand(executable, arguments)), exception);
         }
 
         if (!finished) {
             process.destroyForcibly();
-            throw new GitPushException(text("git.error.timed-out", config.timeoutSeconds(), describeGitCommand(arguments)));
+            throw new GitPushException(text("git.error.timed-out", config.timeoutSeconds(), describeCommand(executable, arguments)));
         }
 
         String output = getOutput(outputFuture);
@@ -586,12 +617,16 @@ public final class GitPushService {
     }
 
     private GitPushException commandFailed(List<String> arguments, CommandResult result) {
-        String output = result.output().isBlank() ? text("git.error.no-output") : sanitizeOutput(result.output());
-        return new GitPushException(text("git.error.command-failed", describeGitCommand(arguments), result.exitCode(), output));
+        return commandFailed(config.executable(), arguments, result);
     }
 
-    private String describeGitCommand(List<String> arguments) {
-        return config.executable() + " " + arguments.stream()
+    private GitPushException commandFailed(String executable, List<String> arguments, CommandResult result) {
+        String output = result.output().isBlank() ? text("git.error.no-output") : sanitizeOutput(result.output());
+        return new GitPushException(text("git.error.command-failed", describeCommand(executable, arguments), result.exitCode(), output));
+    }
+
+    private String describeCommand(String executable, List<String> arguments) {
+        return executable + " " + arguments.stream()
                 .map(this::redactArgument)
                 .collect(Collectors.joining(" "));
     }
@@ -766,7 +801,9 @@ public final class GitPushService {
     }
 
     private record GitConfig(
+            SubmitMethod submitMethod,
             String executable,
+            String githubCliExecutable,
             String remoteUrl,
             String branch,
             String sourceFile,
@@ -785,7 +822,9 @@ public final class GitPushService {
     ) {
         private static GitConfig from(FileConfiguration configuration) {
             return new GitConfig(
+                    SubmitMethod.from(getString(configuration, "git.submit-method", "git")),
                     getString(configuration, "git.executable", "git"),
+                    getString(configuration, "git.github-cli-executable", "gh"),
                     getString(configuration, "git.remote-url", ""),
                     getString(configuration, "git.branch", "main"),
                     getString(configuration, "git.source-file", "plugins/ItemsAdder/output/generated.zip"),
@@ -806,6 +845,22 @@ public final class GitPushService {
 
         private static String getString(FileConfiguration configuration, String path, String defaultValue) {
             return Objects.toString(configuration.getString(path), defaultValue).trim();
+        }
+    }
+
+    private enum SubmitMethod {
+        GIT,
+        GITHUB_CLI;
+
+        private static SubmitMethod from(String configuredMethod) {
+            String normalized = Objects.toString(configuredMethod, "git")
+                    .trim()
+                    .toLowerCase(Locale.ROOT)
+                    .replace('_', '-');
+            return switch (normalized) {
+                case "github-cli", "gh" -> GITHUB_CLI;
+                default -> GIT;
+            };
         }
     }
 }
